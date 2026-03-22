@@ -1,55 +1,55 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using Avalonia.Media;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Singularidi.Themes;
 
 namespace Singularidi.ViewModels;
 
-public sealed class ThemeEditorViewModel : INotifyPropertyChanged
+public sealed partial class ThemeEditorViewModel : ObservableObject
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
-
+    [ObservableProperty]
     private string _name;
-    public string Name { get => _name; set { _name = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private Color _background;
-    public Color Background { get => _background; set { _background = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private Color _guideLine;
-    public Color GuideLine { get => _guideLine; set { _guideLine = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRectangular))]
+    [NotifyPropertyChangedFor(nameof(IsDotBlock))]
     private NoteShape _noteShape;
-    public NoteShape NoteShape { get => _noteShape; set { _noteShape = value; OnPropertyChanged(); } }
 
     public bool IsRectangular
     {
-        get => _noteShape == NoteShape.Rectangular;
-        set { if (value) NoteShape = NoteShape.Rectangular; OnPropertyChanged(); OnPropertyChanged(nameof(IsDotBlock)); }
+        get => NoteShape == NoteShape.Rectangular;
+        set { if (value) NoteShape = NoteShape.Rectangular; }
     }
+
     public bool IsDotBlock
     {
-        get => _noteShape == NoteShape.DotBlock;
-        set { if (value) NoteShape = NoteShape.DotBlock; OnPropertyChanged(); OnPropertyChanged(nameof(IsRectangular)); }
+        get => NoteShape == NoteShape.DotBlock;
+        set { if (value) NoteShape = NoteShape.DotBlock; }
     }
 
+    [ObservableProperty]
     private Color _whiteKey;
-    public Color WhiteKey { get => _whiteKey; set { _whiteKey = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private Color _blackKey;
-    public Color BlackKey { get => _blackKey; set { _blackKey = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private Color _activeHighlight;
-    public Color ActiveHighlight { get => _activeHighlight; set { _activeHighlight = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private float _activeNoteBlend;
-    public float ActiveNoteBlend { get => _activeNoteBlend; set { _activeNoteBlend = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private float _activeWhiteKeyBlend;
-    public float ActiveWhiteKeyBlend { get => _activeWhiteKeyBlend; set { _activeWhiteKeyBlend = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private float _activeBlackKeyBlend;
-    public float ActiveBlackKeyBlend { get => _activeBlackKeyBlend; set { _activeBlackKeyBlend = value; OnPropertyChanged(); } }
 
     public Color[] ChannelColors { get; } = new Color[16];
 
@@ -121,26 +121,18 @@ public sealed class ThemeEditorViewModel : INotifyPropertyChanged
 
     private static string FormatColor(Color c) =>
         c.A < 255 ? $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}" : $"#{c.R:X2}{c.G:X2}{c.B:X2}";
-
-    private void OnPropertyChanged([CallerMemberName] string? name = null)
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-public class ColorOverrideEntry : INotifyPropertyChanged
+public partial class ColorOverrideEntry : ObservableObject
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
-
+    [ObservableProperty]
     private int _noteNumber;
-    public int NoteNumber
-    {
-        get => _noteNumber;
-        set { _noteNumber = Math.Clamp(value, 0, 127); PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(NoteNumber))); }
-    }
 
+    [ObservableProperty]
     private Color _color = Colors.White;
-    public Color Color
+
+    partial void OnNoteNumberChanging(int value)
     {
-        get => _color;
-        set { _color = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Color))); }
+        _noteNumber = Math.Clamp(value, 0, 127);
     }
 }

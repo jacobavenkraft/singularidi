@@ -157,12 +157,6 @@ public partial class MainWindow : Window
     private void OnSaveSoundFontDefault(object? sender, RoutedEventArgs e)
         => _vm.SaveSoundFontAsDefault();
 
-    // ── Toolbar ────────────────────────────────────────────────────────────
-
-    private void OnPlay(object? sender, RoutedEventArgs e) => _vm.Play();
-    private void OnPause(object? sender, RoutedEventArgs e) => _vm.Pause();
-    private void OnStop(object? sender, RoutedEventArgs e) => _vm.Stop();
-
     protected override void OnClosed(EventArgs e)
     {
         _engine.Dispose();

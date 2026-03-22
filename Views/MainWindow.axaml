@@ -39,11 +39,11 @@
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6"
                 Background="#1a1a1a" Margin="0" Height="36">
       <Button Content="Open MIDI" Click="OnOpenMidiFile" Margin="6,4,0,4" Padding="8,2"/>
-      <Button Content="▶ Play"  Click="OnPlay"
+      <Button Content="▶ Play"  Command="{Binding PlayCommand}"
               IsEnabled="{Binding CanPlay}" Margin="0,4,0,4" Padding="8,2"/>
-      <Button Content="⏸ Pause" Click="OnPause"
+      <Button Content="⏸ Pause" Command="{Binding PauseCommand}"
               IsEnabled="{Binding CanPause}" Margin="0,4,0,4" Padding="8,2"/>
-      <Button Content="⏹ Stop"  Click="OnStop"
+      <Button Content="⏹ Stop"  Command="{Binding StopCommand}"
               IsEnabled="{Binding CanStop}"  Margin="0,4,0,4" Padding="8,2"/>
       <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"
                  Foreground="#cccccc" Margin="10,0,0,0" FontSize="12"/>

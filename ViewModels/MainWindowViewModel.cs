@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Singularidi.Audio;
 using Singularidi.Config;
 using Singularidi.Midi;
@@ -8,61 +8,39 @@ using Singularidi.Themes;
 
 namespace Singularidi.ViewModels;
 
-public sealed class MainWindowViewModel : INotifyPropertyChanged
+public sealed partial class MainWindowViewModel : ObservableObject
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
-
     private readonly MidiPlaybackEngine _engine;
     private AppConfig _config;
     private readonly ThemeRegistry _themeRegistry;
 
     // ── Observable properties ──────────────────────────────────────────────
 
+    [ObservableProperty]
     private string _statusText = "No file loaded";
-    public string StatusText
-    {
-        get => _statusText;
-        set { _statusText = value; OnPropertyChanged(); }
-    }
 
+    [ObservableProperty]
     private bool _canPlay;
-    public bool CanPlay { get => _canPlay; set { _canPlay = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private bool _canPause;
-    public bool CanPause { get => _canPause; set { _canPause = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private bool _canStop;
-    public bool CanStop { get => _canStop; set { _canStop = value; OnPropertyChanged(); } }
 
+    [ObservableProperty]
     private AudioOutputMode _currentOutputMode;
-    public AudioOutputMode CurrentOutputMode
-    {
-        get => _currentOutputMode;
-        set { _currentOutputMode = value; OnPropertyChanged(); }
-    }
 
+    [ObservableProperty]
     private string _soundFontPath = "";
-    public string SoundFontPath
-    {
-        get => _soundFontPath;
-        set { _soundFontPath = value; OnPropertyChanged(); }
-    }
 
+    [ObservableProperty]
     private string _selectedMidiDevice = "";
-    public string SelectedMidiDevice
-    {
-        get => _selectedMidiDevice;
-        set { _selectedMidiDevice = value; OnPropertyChanged(); }
-    }
+
+    [ObservableProperty]
+    private string _themeName = "Dark";
 
     public ObservableCollection<string> MidiDevices { get; } = new();
-
-    private string _themeName = "Dark";
-    public string ThemeName
-    {
-        get => _themeName;
-        set { _themeName = value; OnPropertyChanged(); }
-    }
 
     public IReadOnlyCollection<string> AvailableThemes => _themeRegistry.AvailableThemes;
 
@@ -108,7 +86,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public void Play()
+    [RelayCommand]
+    private void Play()
     {
         _engine.Play();
         StatusText = "Playing…";
@@ -117,7 +96,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CanStop = true;
     }
 
-    public void Pause()
+    [RelayCommand]
+    private void Pause()
     {
         _engine.Pause();
         StatusText = "Paused";
@@ -126,7 +106,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         CanStop = true;
     }
 
-    public void Stop()
+    [RelayCommand]
+    private void Stop()
     {
         _engine.Stop();
         StatusText = "Stopped";
@@ -184,7 +165,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _themeRegistry.AddOrUpdate(theme);
         _config.CustomThemes ??= new List<ThemeData>();
 
-        // Replace existing or add new
         var existing = _config.CustomThemes.FindIndex(t => t.Name == theme.Name);
         if (existing >= 0)
             _config.CustomThemes[existing] = theme;
@@ -208,7 +188,4 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             : new MidiDeviceAudioEngine(SelectedMidiDevice);
         _engine.SetAudioEngine(engine);
     }
-
-    private void OnPropertyChanged([CallerMemberName] string? name = null)
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

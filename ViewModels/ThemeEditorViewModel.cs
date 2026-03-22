@@ -77,11 +77,11 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
 
         if (source.NoteColorOverrideValues != null)
             foreach (var kv in source.NoteColorOverrideValues)
-                NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = kv.Key, Color = Color.Parse(kv.Value) });
+                NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = (decimal)kv.Key, Color = Color.Parse(kv.Value) });
 
         if (source.KeyColorOverrideValues != null)
             foreach (var kv in source.KeyColorOverrideValues)
-                KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = kv.Key, Color = Color.Parse(kv.Value) });
+                KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = (decimal)kv.Key, Color = Color.Parse(kv.Value) });
     }
 
     // Parameterless for designer support
@@ -101,7 +101,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
 
     [RelayCommand]
     private void AddNoteOverride() =>
-        NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = 60, Color = Colors.White });
+        NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = 60m, Color = Colors.White });
 
     [RelayCommand]
     private void RemoveNoteOverride(ColorOverrideEntry entry) =>
@@ -109,7 +109,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
 
     [RelayCommand]
     private void AddKeyOverride() =>
-        KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = 60, Color = Colors.White });
+        KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = 60m, Color = Colors.White });
 
     [RelayCommand]
     private void RemoveKeyOverride(ColorOverrideEntry entry) =>
@@ -133,10 +133,10 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
         };
 
         if (NoteOverrides.Count > 0)
-            data.NoteColorOverrideValues = NoteOverrides.ToDictionary(e => e.NoteNumber, e => FormatColor(e.Color));
+            data.NoteColorOverrideValues = NoteOverrides.ToDictionary(e => (int)e.NoteNumber, e => FormatColor(e.Color));
 
         if (KeyOverrides.Count > 0)
-            data.KeyColorOverrideValues = KeyOverrides.ToDictionary(e => e.NoteNumber, e => FormatColor(e.Color));
+            data.KeyColorOverrideValues = KeyOverrides.ToDictionary(e => (int)e.NoteNumber, e => FormatColor(e.Color));
 
         return data;
     }
@@ -164,12 +164,12 @@ public partial class ChannelColorViewModel : ObservableObject
 public partial class ColorOverrideEntry : ObservableObject
 {
     [ObservableProperty]
-    private int _noteNumber;
+    private decimal _noteNumber;
 
     [ObservableProperty]
     private Color _color = Colors.White;
 
-    partial void OnNoteNumberChanging(int value)
+    partial void OnNoteNumberChanging(decimal value)
     {
         _noteNumber = Math.Clamp(value, 0, 127);
     }

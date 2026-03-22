@@ -13,12 +13,11 @@ public partial class MainWindow : Window
     private readonly MainWindowViewModel _vm;
     private readonly MidiPlaybackEngine _engine;
 
-    public MainWindow()
+    public MainWindow(MainWindowViewModel vm, MidiPlaybackEngine engine, AppConfig config)
     {
         InitializeComponent();
-        var config = ConfigService.Load();
-        _engine = new MidiPlaybackEngine();
-        _vm = new MainWindowViewModel(_engine, config);
+        _vm = vm;
+        _engine = engine;
         DataContext = _vm;
 
         Visualizer.SetEngine(_engine);

@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace Singularidi.Config;
 
-public static class ConfigService
+public class ConfigService : IConfigService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -12,7 +12,7 @@ public static class ConfigService
         return Path.Combine(appData, "Singularidi", "config.json");
     }
 
-    public static AppConfig Load()
+    public AppConfig Load()
     {
         var path = GetConfigPath();
         if (!File.Exists(path))
@@ -32,7 +32,7 @@ public static class ConfigService
         }
     }
 
-    public static void Save(AppConfig cfg)
+    public void Save(AppConfig cfg)
     {
         var path = GetConfigPath();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

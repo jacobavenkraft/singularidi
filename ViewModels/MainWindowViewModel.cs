@@ -11,6 +11,7 @@ namespace Singularidi.ViewModels;
 public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly MidiPlaybackEngine _engine;
+    private readonly IConfigService _configService;
     private AppConfig _config;
     private readonly ThemeRegistry _themeRegistry;
 
@@ -46,9 +47,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     // ── Constructor ────────────────────────────────────────────────────────
 
-    public MainWindowViewModel(MidiPlaybackEngine engine, AppConfig config)
+    public MainWindowViewModel(MidiPlaybackEngine engine, IConfigService configService, AppConfig config)
     {
         _engine = engine;
+        _configService = configService;
         _config = config;
         _currentOutputMode = config.OutputMode;
         _soundFontPath = config.SoundFontPath;
@@ -74,7 +76,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             _engine.Load(path);
             _config.LastMidiFilePath = path;
-            ConfigService.Save(_config);
+            _configService.Save(_config);
             StatusText = $"Loaded: {Path.GetFileName(path)}";
             CanPlay = true;
             CanPause = false;
@@ -127,7 +129,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public void SaveSoundFontAsDefault()
     {
         _config.SoundFontPath = SoundFontPath;
-        ConfigService.Save(_config);
+        _configService.Save(_config);
         StatusText = "SoundFont saved as default.";
     }
 
@@ -148,14 +150,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public void SetHighlightActiveNotes(bool value)
     {
         _config.HighlightActiveNotes = value;
-        ConfigService.Save(_config);
+        _configService.Save(_config);
     }
 
     public void SetTheme(string themeName)
     {
         ThemeName = themeName;
         _config.ThemeName = themeName;
-        ConfigService.Save(_config);
+        _configService.Save(_config);
     }
 
     public IVisualTheme GetTheme(string name) => _themeRegistry.Get(name);

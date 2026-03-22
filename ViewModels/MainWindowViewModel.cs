@@ -4,14 +4,16 @@ using CommunityToolkit.Mvvm.Input;
 using Singularidi.Audio;
 using Singularidi.Config;
 using Singularidi.Midi;
+using Singularidi.Services;
 using Singularidi.Themes;
 
 namespace Singularidi.ViewModels;
 
-public sealed partial class MainWindowViewModel : ObservableObject
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly MidiPlaybackEngine _engine;
     private readonly IConfigService _configService;
+    private readonly IDialogService _dialogService;
     private AppConfig _config;
     private readonly ThemeRegistry _themeRegistry;
 
@@ -41,24 +43,39 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _themeName = "Dark";
 
-    public ObservableCollection<string> MidiDevices { get; } = new();
+    [ObservableProperty]
+    private bool _highlightActiveNotes = true;
 
-    public IReadOnlyCollection<string> AvailableThemes => _themeRegistry.AvailableThemes;
+    [ObservableProperty]
+    private IVisualTheme _currentTheme = BuiltInThemes.Dark();
+
+    public MidiPlaybackEngine Engine => _engine;
+
+    public ObservableCollection<MenuItemViewModel> ThemeMenuItems { get; } = new();
+    public ObservableCollection<MenuItemViewModel> MidiDeviceMenuItems { get; } = new();
 
     // ── Constructor ────────────────────────────────────────────────────────
 
-    public MainWindowViewModel(MidiPlaybackEngine engine, IConfigService configService, AppConfig config)
+    public MainWindowViewModel(
+        MidiPlaybackEngine engine,
+        IConfigService configService,
+        IDialogService dialogService,
+        AppConfig config)
     {
         _engine = engine;
         _configService = configService;
+        _dialogService = dialogService;
         _config = config;
         _currentOutputMode = config.OutputMode;
         _soundFontPath = config.SoundFontPath;
         _selectedMidiDevice = config.PreferredMidiDevice;
         _themeName = config.ThemeName;
+        _highlightActiveNotes = config.HighlightActiveNotes;
         _themeRegistry = new ThemeRegistry(config.CustomThemes);
+        _currentTheme = _themeRegistry.Get(config.ThemeName);
 
-        RefreshMidiDevices();
+        RefreshMidiDeviceMenuItems();
+        RefreshThemeMenuItems();
         RebuildAudioEngine();
 
         if (string.IsNullOrEmpty(config.SoundFontPath) && config.OutputMode == AudioOutputMode.SoundFont)
@@ -68,7 +85,23 @@ public sealed partial class MainWindowViewModel : ObservableObject
             OnMidiFileOpened(config.LastMidiFilePath);
     }
 
-    // ── Commands ───────────────────────────────────────────────────────────
+    // ── Highlight toggle ───────────────────────────────────────────────────
+
+    partial void OnHighlightActiveNotesChanged(bool value)
+    {
+        _config.HighlightActiveNotes = value;
+        _configService.Save(_config);
+    }
+
+    // ── File commands ──────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task OpenMidiFileAsync()
+    {
+        var path = await _dialogService.OpenMidiFileAsync();
+        if (path != null)
+            OnMidiFileOpened(path);
+    }
 
     public void OnMidiFileOpened(string path)
     {
@@ -87,6 +120,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             StatusText = $"Error loading file: {ex.Message}";
         }
     }
+
+    [RelayCommand]
+    private void Exit()
+    {
+        // The view will handle closing by binding to this command
+        ExitRequested?.Invoke();
+    }
+
+    public event Action? ExitRequested;
+
+    // ── Playback commands ──────────────────────────────────────────────────
 
     [RelayCommand]
     private void Play()
@@ -118,7 +162,31 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CanStop = false;
     }
 
-    public void SetSoundFontPath(string path)
+    // ── Audio commands ─────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void SetSoundFontMode() => SetOutputMode(AudioOutputMode.SoundFont);
+
+    [RelayCommand]
+    private void SetMidiDeviceMode() => SetOutputMode(AudioOutputMode.MidiDevice);
+
+    [RelayCommand]
+    private async Task SelectSoundFontAsync()
+    {
+        var path = await _dialogService.OpenSoundFontAsync();
+        if (path != null)
+            SetSoundFontPath(path);
+    }
+
+    [RelayCommand]
+    private void SaveSoundFontDefault()
+    {
+        _config.SoundFontPath = SoundFontPath;
+        _configService.Save(_config);
+        StatusText = "SoundFont saved as default.";
+    }
+
+    private void SetSoundFontPath(string path)
     {
         SoundFontPath = path;
         _config.SoundFontPath = path;
@@ -126,43 +194,53 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusText = $"SoundFont: {Path.GetFileName(path)}";
     }
 
-    public void SaveSoundFontAsDefault()
-    {
-        _config.SoundFontPath = SoundFontPath;
-        _configService.Save(_config);
-        StatusText = "SoundFont saved as default.";
-    }
-
-    public void SetOutputMode(AudioOutputMode mode)
+    private void SetOutputMode(AudioOutputMode mode)
     {
         CurrentOutputMode = mode;
         _config.OutputMode = mode;
         RebuildAudioEngine();
     }
 
-    public void SelectMidiDevice(string name)
+    [RelayCommand]
+    private void SelectMidiDevice(string name)
     {
         SelectedMidiDevice = name;
         _config.PreferredMidiDevice = name;
         RebuildAudioEngine();
     }
 
-    public void SetHighlightActiveNotes(bool value)
+    // ── Theme commands ─────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private void ApplyTheme(string name)
     {
-        _config.HighlightActiveNotes = value;
+        ThemeName = name;
+        _config.ThemeName = name;
         _configService.Save(_config);
+        CurrentTheme = _themeRegistry.Get(name);
     }
 
-    public void SetTheme(string themeName)
+    [RelayCommand]
+    private async Task CreateCustomThemeAsync()
     {
-        ThemeName = themeName;
-        _config.ThemeName = themeName;
-        _configService.Save(_config);
+        var currentTheme = _themeRegistry.Get(ThemeName);
+        ThemeData startingData;
+        if (currentTheme is ThemeData td)
+            startingData = td.Clone();
+        else
+            startingData = BuiltInThemes.Dark();
+
+        startingData.Name = "My Custom Theme";
+
+        var result = await _dialogService.ShowThemeEditorAsync(startingData);
+        if (result != null)
+        {
+            SaveCustomTheme(result);
+            RefreshThemeMenuItems();
+        }
     }
 
-    public IVisualTheme GetTheme(string name) => _themeRegistry.Get(name);
-
-    public void SaveCustomTheme(ThemeData theme)
+    private void SaveCustomTheme(ThemeData theme)
     {
         _themeRegistry.AddOrUpdate(theme);
         _config.CustomThemes ??= new List<ThemeData>();
@@ -173,15 +251,40 @@ public sealed partial class MainWindowViewModel : ObservableObject
         else
             _config.CustomThemes.Add(theme);
 
-        SetTheme(theme.Name);
+        ApplyTheme(theme.Name);
     }
 
-    public void RefreshMidiDevices()
+    // ── Dynamic menu builders ──────────────────────────────────────────────
+
+    private void RefreshThemeMenuItems()
     {
-        MidiDevices.Clear();
-        foreach (var d in MidiDeviceAudioEngine.GetAvailableDevices())
-            MidiDevices.Add(d);
+        ThemeMenuItems.Clear();
+        foreach (var name in _themeRegistry.AvailableThemes)
+        {
+            var themeName = name; // capture
+            ThemeMenuItems.Add(new MenuItemViewModel(themeName, ApplyThemeCommand) { Command = new RelayCommand(() => ApplyTheme(themeName)) });
+        }
+        ThemeMenuItems.Add(MenuItemViewModel.Separator());
+        ThemeMenuItems.Add(new MenuItemViewModel("Create Custom Theme…", CreateCustomThemeCommand));
     }
+
+    private void RefreshMidiDeviceMenuItems()
+    {
+        MidiDeviceMenuItems.Clear();
+        var devices = MidiDeviceAudioEngine.GetAvailableDevices();
+        if (devices.Count == 0)
+        {
+            MidiDeviceMenuItems.Add(new MenuItemViewModel { Header = "(no MIDI devices found)", IsEnabled = false });
+            return;
+        }
+        foreach (var device in devices)
+        {
+            var deviceName = device; // capture
+            MidiDeviceMenuItems.Add(new MenuItemViewModel(deviceName, new RelayCommand(() => SelectMidiDevice(deviceName))));
+        }
+    }
+
+    // ── Audio engine ───────────────────────────────────────────────────────
 
     private void RebuildAudioEngine()
     {
@@ -189,5 +292,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             ? new SoundFontAudioEngine(SoundFontPath)
             : new MidiDeviceAudioEngine(SelectedMidiDevice);
         _engine.SetAudioEngine(engine);
+    }
+
+    public void Dispose()
+    {
+        _engine.Dispose();
     }
 }

@@ -1,12 +1,15 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Singularidi.Themes;
 
 namespace Singularidi.ViewModels;
 
 public sealed partial class ThemeEditorViewModel : ObservableObject
 {
+    private readonly Action<ThemeData?> _close;
+
     [ObservableProperty]
     private string _name;
 
@@ -51,13 +54,13 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
     [ObservableProperty]
     private float _activeBlackKeyBlend;
 
-    public Color[] ChannelColors { get; } = new Color[16];
-
+    public ObservableCollection<ChannelColorViewModel> ChannelColorEntries { get; } = new();
     public ObservableCollection<ColorOverrideEntry> NoteOverrides { get; } = new();
     public ObservableCollection<ColorOverrideEntry> KeyOverrides { get; } = new();
 
-    public ThemeEditorViewModel(ThemeData source)
+    public ThemeEditorViewModel(ThemeData source, Action<ThemeData?> close)
     {
+        _close = close;
         _name = source.Name;
         _background = Color.Parse(source.Background);
         _guideLine = Color.Parse(source.GuideLine);
@@ -70,7 +73,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
         _activeBlackKeyBlend = source.ActiveBlackKeyBlend;
 
         for (int i = 0; i < 16; i++)
-            ChannelColors[i] = Color.Parse(source.ChannelColorValues[i]);
+            ChannelColorEntries.Add(new ChannelColorViewModel(i, Color.Parse(source.ChannelColorValues[i])));
 
         if (source.NoteColorOverrideValues != null)
             foreach (var kv in source.NoteColorOverrideValues)
@@ -81,6 +84,37 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
                 KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = kv.Key, Color = Color.Parse(kv.Value) });
     }
 
+    // Parameterless for designer support
+    public ThemeEditorViewModel() : this(BuiltInThemes.Dark(), _ => { }) { }
+
+    [RelayCommand]
+    private void Save()
+    {
+        if (string.IsNullOrWhiteSpace(Name))
+            Name = "Custom";
+
+        _close(ToThemeData());
+    }
+
+    [RelayCommand]
+    private void Cancel() => _close(null);
+
+    [RelayCommand]
+    private void AddNoteOverride() =>
+        NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = 60, Color = Colors.White });
+
+    [RelayCommand]
+    private void RemoveNoteOverride(ColorOverrideEntry entry) =>
+        NoteOverrides.Remove(entry);
+
+    [RelayCommand]
+    private void AddKeyOverride() =>
+        KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = 60, Color = Colors.White });
+
+    [RelayCommand]
+    private void RemoveKeyOverride(ColorOverrideEntry entry) =>
+        KeyOverrides.Remove(entry);
+
     public ThemeData ToThemeData()
     {
         var data = new ThemeData
@@ -89,7 +123,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
             Background = FormatColor(Background),
             GuideLine = FormatColor(GuideLine),
             NoteShape = NoteShape,
-            ChannelColorValues = ChannelColors.Select(FormatColor).ToArray(),
+            ChannelColorValues = ChannelColorEntries.Select(e => FormatColor(e.Color)).ToArray(),
             WhiteKey = FormatColor(WhiteKey),
             BlackKey = FormatColor(BlackKey),
             ActiveHighlight = FormatColor(ActiveHighlight),
@@ -107,20 +141,24 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
         return data;
     }
 
-    public void AddNoteOverride() =>
-        NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = 60, Color = Colors.White });
-
-    public void RemoveNoteOverride(ColorOverrideEntry entry) =>
-        NoteOverrides.Remove(entry);
-
-    public void AddKeyOverride() =>
-        KeyOverrides.Add(new ColorOverrideEntry { NoteNumber = 60, Color = Colors.White });
-
-    public void RemoveKeyOverride(ColorOverrideEntry entry) =>
-        KeyOverrides.Remove(entry);
-
     private static string FormatColor(Color c) =>
         c.A < 255 ? $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}" : $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+}
+
+public partial class ChannelColorViewModel : ObservableObject
+{
+    public int ChannelIndex { get; }
+
+    public string Label => $"Ch {ChannelIndex}";
+
+    [ObservableProperty]
+    private Color _color;
+
+    public ChannelColorViewModel(int channelIndex, Color color)
+    {
+        ChannelIndex = channelIndex;
+        _color = color;
+    }
 }
 
 public partial class ColorOverrideEntry : ObservableObject

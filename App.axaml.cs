@@ -1,9 +1,11 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Microsoft.Extensions.DependencyInjection;
 using Singularidi.Config;
 using Singularidi.Midi;
+using Singularidi.Services;
 using Singularidi.ViewModels;
 using Singularidi.Views;
 
@@ -26,7 +28,8 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = Services.GetRequiredService<MainWindow>();
+            var mainWindow = Services.GetRequiredService<MainWindow>();
+            desktop.MainWindow = mainWindow;
         }
         base.OnFrameworkInitializationCompleted();
     }
@@ -39,6 +42,10 @@ public partial class App : Application
 
         // Core
         services.AddSingleton<MidiPlaybackEngine>();
+
+        // Services — DialogService needs the Window, which is resolved lazily
+        services.AddSingleton<IDialogService>(sp =>
+            new DialogService(() => sp.GetRequiredService<MainWindow>()));
 
         // ViewModels
         services.AddSingleton<MainWindowViewModel>();

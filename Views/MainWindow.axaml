@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Singularidi.Controls"
+        x:Class="Singularidi.Views.MainWindow"
+        Title="Singularidi — MIDI Visualizer"
+        Width="1280" Height="720"
+        MinWidth="640" MinHeight="400"
+        Background="#0d0d0d">
+
+  <DockPanel>
+
+    <!-- Menu bar -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="Open MIDI File…" Click="OnOpenMidiFile" InputGesture="Ctrl+O"/>
+        <Separator/>
+        <MenuItem Header="E_xit" Click="OnExit"/>
+      </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Header="Highlight Active Notes" Name="MenuHighlightNotes"
+                  ToggleType="CheckBox" IsChecked="True" Click="OnToggleHighlightNotes"/>
+      </MenuItem>
+      <MenuItem Header="_Audio">
+        <MenuItem Header="Output Mode">
+          <MenuItem Header="SoundFont Synthesis" Name="MenuSoundFont" Click="OnSetSoundFont"/>
+          <MenuItem Header="MIDI Device" Name="MenuMidiDevice" Click="OnSetMidiDevice"/>
+        </MenuItem>
+        <Separator/>
+        <MenuItem Header="Select SoundFont…" Click="OnSelectSoundFont"/>
+        <MenuItem Header="Save SoundFont as Default" Click="OnSaveSoundFontDefault"/>
+        <Separator/>
+        <MenuItem Header="MIDI Devices" Name="MenuMidiDevices"/>
+      </MenuItem>
+    </Menu>
+
+    <!-- Toolbar -->
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6"
+                Background="#1a1a1a" Margin="0" Height="36">
+      <Button Content="Open MIDI" Click="OnOpenMidiFile" Margin="6,4,0,4" Padding="8,2"/>
+      <Button Content="▶ Play"  Click="OnPlay"
+              IsEnabled="{Binding CanPlay}" Margin="0,4,0,4" Padding="8,2"/>
+      <Button Content="⏸ Pause" Click="OnPause"
+              IsEnabled="{Binding CanPause}" Margin="0,4,0,4" Padding="8,2"/>
+      <Button Content="⏹ Stop"  Click="OnStop"
+              IsEnabled="{Binding CanStop}"  Margin="0,4,0,4" Padding="8,2"/>
+      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"
+                 Foreground="#cccccc" Margin="10,0,0,0" FontSize="12"/>
+    </StackPanel>
+
+    <!-- Visualizer fills remaining space -->
+    <controls:NoteVisualizerControl Name="Visualizer"/>
+
+  </DockPanel>
+</Window>

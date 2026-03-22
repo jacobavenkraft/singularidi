@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet build:*)",
+      "Bash(echo exit:$?:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(grep -r FilePickerFileType d:/001_source/singularidi/obj/ --include=*.cs -l)"
+    ]
+  }
+}

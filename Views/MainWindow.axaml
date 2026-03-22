@@ -19,6 +19,8 @@
       <MenuItem Header="_View">
         <MenuItem Header="Highlight Active Notes" Name="MenuHighlightNotes"
                   ToggleType="CheckBox" IsChecked="True" Click="OnToggleHighlightNotes"/>
+        <Separator/>
+        <MenuItem Header="Theme" Name="MenuTheme"/>
       </MenuItem>
       <MenuItem Header="_Audio">
         <MenuItem Header="Output Mode">

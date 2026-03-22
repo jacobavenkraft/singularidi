@@ -3,6 +3,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Singularidi.Config;
 using Singularidi.Midi;
+using Singularidi.Themes;
 using Singularidi.ViewModels;
 
 namespace Singularidi.Views;
@@ -23,6 +24,10 @@ public partial class MainWindow : Window
         Visualizer.SetEngine(_engine);
         Visualizer.HighlightActiveNotes = config.HighlightActiveNotes;
         MenuHighlightNotes.IsChecked = config.HighlightActiveNotes;
+
+        // Apply saved theme
+        ApplyTheme(config.ThemeName);
+        RefreshThemeMenu();
         RefreshMidiDevicesMenu();
 
         _vm.PropertyChanged += (_, e) =>
@@ -31,6 +36,54 @@ public partial class MainWindow : Window
                 RefreshMidiDevicesMenu();
         };
     }
+
+    // ── Theme menu ───────────────────────────────────────────────────────
+
+    private void RefreshThemeMenu()
+    {
+        MenuTheme.Items.Clear();
+        foreach (var name in _vm.AvailableThemes)
+        {
+            var item = new MenuItem { Header = name };
+            var themeName = name; // capture for closure
+            item.Click += (_, _) => ApplyTheme(themeName);
+            MenuTheme.Items.Add(item);
+        }
+        MenuTheme.Items.Add(new Separator());
+        var createItem = new MenuItem { Header = "Create Custom Theme…" };
+        createItem.Click += OnCreateCustomTheme;
+        MenuTheme.Items.Add(createItem);
+    }
+
+    private void ApplyTheme(string name)
+    {
+        _vm.SetTheme(name);
+        Visualizer.Theme = _vm.GetTheme(name);
+    }
+
+    private async void OnCreateCustomTheme(object? sender, RoutedEventArgs e)
+    {
+        // Clone current theme as starting point
+        var currentTheme = _vm.GetTheme(_vm.ThemeName);
+        ThemeData startingData;
+        if (currentTheme is ThemeData td)
+            startingData = td.Clone();
+        else
+            startingData = BuiltInThemes.Dark(); // fallback
+
+        startingData.Name = "My Custom Theme";
+
+        var editor = new ThemeEditorWindow(startingData);
+        var result = await editor.ShowDialog<ThemeData?>(this);
+        if (result != null)
+        {
+            _vm.SaveCustomTheme(result);
+            Visualizer.Theme = result;
+            RefreshThemeMenu();
+        }
+    }
+
+    // ── MIDI device menu ─────────────────────────────────────────────────
 
     private void RefreshMidiDevicesMenu()
     {

@@ -1,0 +1,115 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Singularidi.Views.ThemeEditorWindow"
+        Title="Theme Editor"
+        Width="700" Height="800"
+        MinWidth="600" MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        Background="#1e1e1e">
+
+  <ScrollViewer Padding="16">
+    <StackPanel Spacing="12">
+
+      <!-- Theme Name -->
+      <TextBlock Text="Theme Name" Foreground="#cccccc" FontWeight="Bold"/>
+      <TextBox Name="TxtThemeName" Watermark="Enter theme name"/>
+
+      <Separator/>
+
+      <!-- Background & Guides -->
+      <TextBlock Text="Background" Foreground="#cccccc" FontWeight="Bold"/>
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Background Color" Foreground="#999999" FontSize="11"/>
+          <ColorPicker Name="PickerBackground" Width="200" Height="32"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Guide Line Color" Foreground="#999999" FontSize="11"/>
+          <ColorPicker Name="PickerGuideLine" Width="200" Height="32"/>
+        </StackPanel>
+      </StackPanel>
+
+      <Separator/>
+
+      <!-- Note Shape -->
+      <TextBlock Text="Note Shape" Foreground="#cccccc" FontWeight="Bold"/>
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <RadioButton Name="RadioRectangular" Content="Rectangular" GroupName="NoteShape"
+                     Foreground="#cccccc"/>
+        <RadioButton Name="RadioDotBlock" Content="Dot Block (rounded)" GroupName="NoteShape"
+                     Foreground="#cccccc"/>
+      </StackPanel>
+
+      <Separator/>
+
+      <!-- Channel Colors -->
+      <TextBlock Text="Channel Colors (16)" Foreground="#cccccc" FontWeight="Bold"/>
+      <WrapPanel Name="ChannelColorsPanel" Orientation="Horizontal"/>
+
+      <Separator/>
+
+      <!-- Note Color Overrides -->
+      <TextBlock Text="Note Color Overrides (per MIDI note)" Foreground="#cccccc" FontWeight="Bold"/>
+      <StackPanel Name="NoteOverridesPanel" Spacing="4"/>
+      <Button Name="BtnAddNoteOverride" Content="+ Add Note Override" Padding="8,4"
+              HorizontalAlignment="Left"/>
+
+      <Separator/>
+
+      <!-- Piano Keys -->
+      <TextBlock Text="Piano Key Colors" Foreground="#cccccc" FontWeight="Bold"/>
+      <StackPanel Orientation="Horizontal" Spacing="16">
+        <StackPanel Spacing="4">
+          <TextBlock Text="White Key Color" Foreground="#999999" FontSize="11"/>
+          <ColorPicker Name="PickerWhiteKey" Width="200" Height="32"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Black Key Color" Foreground="#999999" FontSize="11"/>
+          <ColorPicker Name="PickerBlackKey" Width="200" Height="32"/>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Key Color Overrides -->
+      <TextBlock Text="Key Color Overrides (per piano key)" Foreground="#cccccc" FontWeight="Bold"
+                 Margin="0,8,0,0"/>
+      <StackPanel Name="KeyOverridesPanel" Spacing="4"/>
+      <Button Name="BtnAddKeyOverride" Content="+ Add Key Override" Padding="8,4"
+              HorizontalAlignment="Left"/>
+
+      <Separator/>
+
+      <!-- Active Highlight -->
+      <TextBlock Text="Active Highlight" Foreground="#cccccc" FontWeight="Bold"/>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Highlight Color" Foreground="#999999" FontSize="11"/>
+        <ColorPicker Name="PickerActiveHighlight" Width="200" Height="32"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,0">
+        <StackPanel Spacing="4" Width="180">
+          <TextBlock Text="Note Blend" Foreground="#999999" FontSize="11"/>
+          <Slider Name="SliderNoteBlend" Minimum="0" Maximum="1" TickFrequency="0.05"
+                  IsSnapToTickEnabled="True"/>
+        </StackPanel>
+        <StackPanel Spacing="4" Width="180">
+          <TextBlock Text="White Key Blend" Foreground="#999999" FontSize="11"/>
+          <Slider Name="SliderWhiteKeyBlend" Minimum="0" Maximum="1" TickFrequency="0.05"
+                  IsSnapToTickEnabled="True"/>
+        </StackPanel>
+        <StackPanel Spacing="4" Width="180">
+          <TextBlock Text="Black Key Blend" Foreground="#999999" FontSize="11"/>
+          <Slider Name="SliderBlackKeyBlend" Minimum="0" Maximum="1" TickFrequency="0.05"
+                  IsSnapToTickEnabled="True"/>
+        </StackPanel>
+      </StackPanel>
+
+      <Separator/>
+
+      <!-- Save / Cancel -->
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+        <Button Name="BtnSave" Content="Save Theme" Padding="16,6" Click="OnSave"/>
+        <Button Name="BtnCancel" Content="Cancel" Padding="16,6" Click="OnCancel"/>
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
+</Window>

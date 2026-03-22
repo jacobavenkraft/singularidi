@@ -3,33 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Singularidi.Midi;
+using Singularidi.Themes;
 
 namespace Singularidi.Controls;
 
 public sealed class NoteVisualizerControl : Control
 {
-    private static readonly Color[] ChannelColors =
-    [
-        Color.Parse("#FF5050"), Color.Parse("#FF9040"), Color.Parse("#FFD740"), Color.Parse("#70E050"),
-        Color.Parse("#40D4D4"), Color.Parse("#4080FF"), Color.Parse("#A050FF"), Color.Parse("#FF50C8"),
-        Color.Parse("#FF8080"), Color.Parse("#80FF80"), Color.Parse("#80FFFF"), Color.Parse("#8080FF"),
-        Color.Parse("#FF80C0"), Color.Parse("#FFC080"), Color.Parse("#C0FF80"), Color.Parse("#C080FF"),
-    ];
-
-    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#0d0d0d"));
-    private static readonly IBrush WhiteKeyInactiveBrush = new SolidColorBrush(Color.FromRgb(240, 240, 240));
-    private static readonly IBrush BlackKeyInactiveBrush = new SolidColorBrush(Color.FromRgb(26, 26, 26));
-    private static readonly IBrush GuideBrush = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255));
-    private static readonly IPen GuidePen = new Pen(GuideBrush, 1);
-    private static readonly IPen BlackKeyBorderPen = new Pen(Brushes.Black, 0.5);
-
-    // Per-note layout cache
-    private readonly double[] _xCenter = new double[128];
-    private readonly double[] _noteWidth = new double[128];
-    private double _cachedWidth = -1;
-    private double _whiteKeyWidth;
-    private double _blackKeyWidth;
-
     // Black key pattern per semitone in octave: true = black key
     private static readonly bool[] IsBlackKey =
     [
@@ -47,20 +26,68 @@ public sealed class NoteVisualizerControl : Control
     private const double LookAheadSeconds = 4.0;
     private const double PianoHeightFraction = 0.15;
 
+    // Per-note layout cache
+    private readonly double[] _xCenter = new double[128];
+    private readonly double[] _noteWidth = new double[128];
+    private double _cachedWidth = -1;
+    private double _whiteKeyWidth;
+    private double _blackKeyWidth;
+
+    // Active keys: note number → channel
+    private readonly int[] _activeKeyChannel = new int[128];
+
     public bool HighlightActiveNotes { get; set; } = true;
 
     private MidiPlaybackEngine? _engine;
     private readonly DispatcherTimer _renderTimer;
 
-    // Active keys: note number → channel
-    private readonly int[] _activeKeyChannel = new int[128];
+    // ── Theme ───────────────────────────────────────────────────────────
+
+    private IVisualTheme _theme = BuiltInThemes.Dark();
+
+    public new IVisualTheme Theme
+    {
+        get => _theme;
+        set
+        {
+            _theme = value;
+            InvalidateThemeCaches();
+        }
+    }
+
+    // Cached brushes/pens rebuilt when theme changes
+    private IBrush _backgroundBrush = null!;
+    private IPen _guidePen = null!;
+    private IBrush _whiteKeyBrush = null!;
+    private IBrush _blackKeyBrush = null!;
+    private IPen _whiteKeyBorderPen = null!;
+    private SolidColorBrush[] _channelBrushes = null!;
+    private Color[] _channelColors = null!;
+    private Dictionary<int, Color>? _noteColorOverrides;
+    private Dictionary<int, Color>? _keyColorOverrides;
+
+    // ── Constructor ─────────────────────────────────────────────────────
 
     public NoteVisualizerControl()
     {
         Array.Fill(_activeKeyChannel, -1);
+        InvalidateThemeCaches();
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _renderTimer.Tick += OnRenderTick;
         _renderTimer.Start();
+    }
+
+    private void InvalidateThemeCaches()
+    {
+        _backgroundBrush = new SolidColorBrush(_theme.BackgroundColor);
+        _guidePen = new Pen(new SolidColorBrush(_theme.GuideLineColor), 1);
+        _whiteKeyBrush = new SolidColorBrush(_theme.WhiteKeyColor);
+        _blackKeyBrush = new SolidColorBrush(_theme.BlackKeyColor);
+        _whiteKeyBorderPen = new Pen(Brushes.Black, 0.5);
+        _channelColors = _theme.ChannelColors;
+        _channelBrushes = _channelColors.Select(c => new SolidColorBrush(c)).ToArray();
+        _noteColorOverrides = _theme.NoteColorOverrides;
+        _keyColorOverrides = _theme.KeyColorOverrides;
     }
 
     public void SetEngine(MidiPlaybackEngine engine)
@@ -116,12 +143,12 @@ public sealed class NoteVisualizerControl : Control
         double vizHeight = h - pianoHeight;
 
         // 1. Background
-        ctx.DrawRectangle(BackgroundBrush, null, new Rect(0, 0, w, h));
+        ctx.DrawRectangle(_backgroundBrush, null, new Rect(0, 0, w, h));
 
         // 2. Note lane guides
         for (int note = 0; note < 128; note++)
         {
-            ctx.DrawLine(GuidePen,
+            ctx.DrawLine(_guidePen,
                 new Point(_xCenter[note], 0),
                 new Point(_xCenter[note], vizHeight));
         }
@@ -143,15 +170,23 @@ public sealed class NoteVisualizerControl : Control
                 double rectH = yBottom - yTop;
                 if (rectH < 1) rectH = 1;
 
-                var baseColor = ChannelColors[note.Channel % 16];
+                // Resolve note color: per-note override → channel color
+                Color baseColor;
+                if (_noteColorOverrides != null && _noteColorOverrides.TryGetValue(note.NoteNumber, out var overrideColor))
+                    baseColor = overrideColor;
+                else
+                    baseColor = _channelColors[note.Channel % 16];
+
                 bool isActive = HighlightActiveNotes && _activeKeyChannel[note.NoteNumber] == note.Channel;
-                var fillColor = isActive ? LerpToWhite(baseColor, 0.4f) : baseColor;
+                var fillColor = isActive ? LerpToColor(baseColor, _theme.ActiveHighlightColor, _theme.ActiveNoteBlend) : baseColor;
                 var brush = new SolidColorBrush(fillColor);
 
                 double nw = _noteWidth[note.NoteNumber];
                 double x = _xCenter[note.NoteNumber] - nw / 2;
                 var rect = new Rect(x, yTop, nw, rectH);
-                ctx.DrawRectangle(brush, null, rect, 2, 2);
+
+                double cornerRadius = _theme.NoteShape == NoteShape.DotBlock ? nw / 2 : 2;
+                ctx.DrawRectangle(brush, null, rect, cornerRadius, cornerRadius);
             }
         }
 
@@ -165,13 +200,22 @@ public sealed class NoteVisualizerControl : Control
             int channel = _activeKeyChannel[note];
             IBrush keyBrush;
             if (channel >= 0)
-                keyBrush = new SolidColorBrush(LerpToWhite(ChannelColors[channel % 16], 0.5f));
+            {
+                var keyBase = _channelColors[channel % 16];
+                keyBrush = new SolidColorBrush(LerpToColor(keyBase, _theme.ActiveHighlightColor, _theme.ActiveWhiteKeyBlend));
+            }
+            else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))
+            {
+                keyBrush = new SolidColorBrush(keyOverride);
+            }
             else
-                keyBrush = WhiteKeyInactiveBrush;
+            {
+                keyBrush = _whiteKeyBrush;
+            }
 
             double x = _xCenter[note] - _whiteKeyWidth / 2;
             var keyRect = new Rect(x, pianoY, _whiteKeyWidth - 1, pianoHeight);
-            ctx.DrawRectangle(keyBrush, BlackKeyBorderPen, keyRect, 0, 3);
+            ctx.DrawRectangle(keyBrush, _whiteKeyBorderPen, keyRect, 0, 3);
         }
 
         // Black keys on top
@@ -181,9 +225,18 @@ public sealed class NoteVisualizerControl : Control
             int channel = _activeKeyChannel[note];
             IBrush keyBrush;
             if (channel >= 0)
-                keyBrush = new SolidColorBrush(LerpToWhite(ChannelColors[channel % 16], 0.3f));
+            {
+                var keyBase = _channelColors[channel % 16];
+                keyBrush = new SolidColorBrush(LerpToColor(keyBase, _theme.ActiveHighlightColor, _theme.ActiveBlackKeyBlend));
+            }
+            else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))
+            {
+                keyBrush = new SolidColorBrush(keyOverride);
+            }
             else
-                keyBrush = BlackKeyInactiveBrush;
+            {
+                keyBrush = _blackKeyBrush;
+            }
 
             double x = _xCenter[note] - _blackKeyWidth / 2;
             double bh = pianoHeight * 0.65;
@@ -192,12 +245,12 @@ public sealed class NoteVisualizerControl : Control
         }
     }
 
-    private static Color LerpToWhite(Color c, float t)
+    private static Color LerpToColor(Color c, Color target, float t)
     {
-        float r = c.R / 255f + (1f - c.R / 255f) * t;
-        float g = c.G / 255f + (1f - c.G / 255f) * t;
-        float b = c.B / 255f + (1f - c.B / 255f) * t;
-        return Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
+        byte r = (byte)(c.R + (target.R - c.R) * t);
+        byte g = (byte)(c.G + (target.G - c.G) * t);
+        byte b = (byte)(c.B + (target.B - c.B) * t);
+        return Color.FromRgb(r, g, b);
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)

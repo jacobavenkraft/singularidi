@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Singularidi.Audio;
 using Singularidi.Config;
 using Singularidi.Midi;
+using Singularidi.Themes;
 
 namespace Singularidi.ViewModels;
 
@@ -13,6 +14,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private readonly MidiPlaybackEngine _engine;
     private AppConfig _config;
+    private readonly ThemeRegistry _themeRegistry;
 
     // ── Observable properties ──────────────────────────────────────────────
 
@@ -55,6 +57,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public ObservableCollection<string> MidiDevices { get; } = new();
 
+    private string _themeName = "Dark";
+    public string ThemeName
+    {
+        get => _themeName;
+        set { _themeName = value; OnPropertyChanged(); }
+    }
+
+    public IReadOnlyCollection<string> AvailableThemes => _themeRegistry.AvailableThemes;
+
     // ── Constructor ────────────────────────────────────────────────────────
 
     public MainWindowViewModel(MidiPlaybackEngine engine, AppConfig config)
@@ -64,6 +75,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _currentOutputMode = config.OutputMode;
         _soundFontPath = config.SoundFontPath;
         _selectedMidiDevice = config.PreferredMidiDevice;
+        _themeName = config.ThemeName;
+        _themeRegistry = new ThemeRegistry(config.CustomThemes);
 
         RefreshMidiDevices();
         RebuildAudioEngine();
@@ -155,6 +168,30 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _config.HighlightActiveNotes = value;
         ConfigService.Save(_config);
+    }
+
+    public void SetTheme(string themeName)
+    {
+        ThemeName = themeName;
+        _config.ThemeName = themeName;
+        ConfigService.Save(_config);
+    }
+
+    public IVisualTheme GetTheme(string name) => _themeRegistry.Get(name);
+
+    public void SaveCustomTheme(ThemeData theme)
+    {
+        _themeRegistry.AddOrUpdate(theme);
+        _config.CustomThemes ??= new List<ThemeData>();
+
+        // Replace existing or add new
+        var existing = _config.CustomThemes.FindIndex(t => t.Name == theme.Name);
+        if (existing >= 0)
+            _config.CustomThemes[existing] = theme;
+        else
+            _config.CustomThemes.Add(theme);
+
+        SetTheme(theme.Name);
     }
 
     public void RefreshMidiDevices()

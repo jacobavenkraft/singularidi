@@ -9,6 +9,15 @@
         MinWidth="640" MinHeight="400"
         Background="#0d0d0d">
 
+  <Window.Styles>
+    <!-- Style for dynamically-generated child MenuItems within .dynamic parents -->
+    <Style Selector="MenuItem.dynamic MenuItem">
+      <Setter Property="Header" Value="{Binding Header}"/>
+      <Setter Property="Command" Value="{Binding Command}"/>
+      <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
+    </Style>
+  </Window.Styles>
+
   <DockPanel>
 
     <!-- Menu bar -->
@@ -22,15 +31,7 @@
         <MenuItem Header="Highlight Active Notes"
                   ToggleType="CheckBox" IsChecked="{Binding HighlightActiveNotes}"/>
         <Separator/>
-        <MenuItem Header="Theme" ItemsSource="{Binding ThemeMenuItems}">
-          <MenuItem.Styles>
-            <Style Selector="MenuItem">
-              <Setter Property="Header" Value="{Binding Header}"/>
-              <Setter Property="Command" Value="{Binding Command}"/>
-              <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
-            </Style>
-          </MenuItem.Styles>
-        </MenuItem>
+        <MenuItem Header="Theme" Classes="dynamic" ItemsSource="{Binding ThemeMenuItems}"/>
       </MenuItem>
       <MenuItem Header="_Audio">
         <MenuItem Header="Output Mode">
@@ -41,15 +42,7 @@
         <MenuItem Header="Select SoundFont…" Command="{Binding SelectSoundFontCommand}"/>
         <MenuItem Header="Save SoundFont as Default" Command="{Binding SaveSoundFontDefaultCommand}"/>
         <Separator/>
-        <MenuItem Header="MIDI Devices" ItemsSource="{Binding MidiDeviceMenuItems}">
-          <MenuItem.Styles>
-            <Style Selector="MenuItem">
-              <Setter Property="Header" Value="{Binding Header}"/>
-              <Setter Property="Command" Value="{Binding Command}"/>
-              <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
-            </Style>
-          </MenuItem.Styles>
-        </MenuItem>
+        <MenuItem Header="MIDI Devices" Classes="dynamic" ItemsSource="{Binding MidiDeviceMenuItems}"/>
       </MenuItem>
     </Menu>
 

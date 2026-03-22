@@ -18,8 +18,6 @@ public sealed partial class MenuItemViewModel : ObservableObject
     [ObservableProperty]
     private bool _isEnabled = true;
 
-    public bool IsSeparator { get; init; }
-
     public ObservableCollection<MenuItemViewModel>? Items { get; init; }
 
     public MenuItemViewModel() { }
@@ -29,6 +27,4 @@ public sealed partial class MenuItemViewModel : ObservableObject
         _header = header;
         _command = command;
     }
-
-    public static MenuItemViewModel Separator() => new() { IsSeparator = true };
 }

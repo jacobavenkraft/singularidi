@@ -262,9 +262,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         foreach (var name in _themeRegistry.AvailableThemes)
         {
             var themeName = name; // capture
-            ThemeMenuItems.Add(new MenuItemViewModel(themeName, ApplyThemeCommand) { Command = new RelayCommand(() => ApplyTheme(themeName)) });
+            ThemeMenuItems.Add(new MenuItemViewModel(themeName, new RelayCommand(() => ApplyTheme(themeName))));
         }
-        ThemeMenuItems.Add(MenuItemViewModel.Separator());
         ThemeMenuItems.Add(new MenuItemViewModel("Create Custom Theme…", CreateCustomThemeCommand));
     }
 

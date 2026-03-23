@@ -24,15 +24,18 @@
       </StackPanel>
     </Border>
 
-    <!-- Scrollable content fills remaining space -->
-    <ScrollViewer Padding="16">
+    <Border DockPanel.Dock="Top" Padding="16 0">
       <StackPanel Spacing="12">
-
         <!-- Theme Name -->
         <TextBlock Text="Theme Name" Foreground="#cccccc" FontWeight="Bold"/>
         <TextBox Text="{Binding Name}" Watermark="Enter theme name"/>
-
         <Separator/>
+      </StackPanel>
+     
+    </Border>
+    <!-- Scrollable content fills remaining space -->
+    <ScrollViewer Padding="16">
+      <StackPanel Spacing="12">
 
         <!-- Background & Guides -->
         <TextBlock Text="Background" Foreground="#cccccc" FontWeight="Bold"/>

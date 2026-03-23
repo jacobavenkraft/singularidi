@@ -11,8 +11,13 @@ public interface IVisualTheme
 
     NoteShape NoteShape { get; }
 
+    NoteColorMode ColorMode { get; }
+
     /// <summary>16 colors, one per MIDI channel (0–15).</summary>
     Color[] ChannelColors { get; }
+
+    /// <summary>Variable-length track colors. Falls back to ChannelColors when not set.</summary>
+    Color[] TrackColors { get; }
 
     /// <summary>Sparse per-note overrides keyed by MIDI note number (0–127). Null = use ChannelColors.</summary>
     Dictionary<int, Color>? NoteColorOverrides { get; }
@@ -33,4 +38,10 @@ public enum NoteShape
 {
     Rectangular,
     DotBlock
+}
+
+public enum NoteColorMode
+{
+    Channel,
+    Track
 }

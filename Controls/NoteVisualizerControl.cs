@@ -67,8 +67,9 @@ public sealed class NoteVisualizerControl : Control
     private double _whiteKeyWidth;
     private double _blackKeyWidth;
 
-    // Active keys: note number → channel
+    // Active keys: note number → channel / track
     private readonly int[] _activeKeyChannel = new int[128];
+    private readonly int[] _activeKeyTrack = new int[128];
 
     private readonly DispatcherTimer _renderTimer;
 
@@ -80,6 +81,8 @@ public sealed class NoteVisualizerControl : Control
     private IPen _whiteKeyBorderPen = null!;
     private SolidColorBrush[] _channelBrushes = null!;
     private Color[] _channelColors = null!;
+    private Color[] _trackColors = null!;
+    private NoteColorMode _colorMode;
     private Dictionary<int, Color>? _noteColorOverrides;
     private Dictionary<int, Color>? _keyColorOverrides;
 
@@ -88,6 +91,7 @@ public sealed class NoteVisualizerControl : Control
     public NoteVisualizerControl()
     {
         Array.Fill(_activeKeyChannel, -1);
+        Array.Fill(_activeKeyTrack, -1);
         InvalidateThemeCaches();
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _renderTimer.Tick += OnRenderTick;
@@ -108,8 +112,10 @@ public sealed class NoteVisualizerControl : Control
         _whiteKeyBrush = new SolidColorBrush(theme.WhiteKeyColor);
         _blackKeyBrush = new SolidColorBrush(theme.BlackKeyColor);
         _whiteKeyBorderPen = new Pen(Brushes.Black, 0.5);
+        _colorMode = theme.ColorMode;
         _channelColors = theme.ChannelColors;
         _channelBrushes = _channelColors.Select(c => new SolidColorBrush(c)).ToArray();
+        _trackColors = theme.TrackColors;
         _noteColorOverrides = theme.NoteColorOverrides;
         _keyColorOverrides = theme.KeyColorOverrides;
     }
@@ -124,13 +130,17 @@ public sealed class NoteVisualizerControl : Control
     private void UpdateActiveKeys()
     {
         Array.Fill(_activeKeyChannel, -1);
+        Array.Fill(_activeKeyTrack, -1);
         var engine = Engine;
         if (engine == null) return;
         var now = engine.CurrentTime.TotalSeconds;
         foreach (var note in engine.Notes)
         {
             if (note.StartSeconds <= now && note.EndSeconds >= now)
+            {
                 _activeKeyChannel[note.NoteNumber] = note.Channel;
+                _activeKeyTrack[note.NoteNumber] = note.Track;
+            }
         }
     }
 
@@ -192,14 +202,19 @@ public sealed class NoteVisualizerControl : Control
                 double rectH = yBottom - yTop;
                 if (rectH < 1) rectH = 1;
 
-                // Resolve note color: per-note override → channel color
+                // Resolve note color: per-note override → track/channel color
                 Color baseColor;
                 if (_noteColorOverrides != null && _noteColorOverrides.TryGetValue(note.NoteNumber, out var overrideColor))
                     baseColor = overrideColor;
+                else if (_colorMode == NoteColorMode.Track && _trackColors.Length > 0)
+                    baseColor = _trackColors[note.Track % _trackColors.Length];
                 else
                     baseColor = _channelColors[note.Channel % 16];
 
-                bool isActive = HighlightActiveNotes && _activeKeyChannel[note.NoteNumber] == note.Channel;
+                bool isActive = HighlightActiveNotes && (
+                    _colorMode == NoteColorMode.Track
+                        ? _activeKeyTrack[note.NoteNumber] == note.Track
+                        : _activeKeyChannel[note.NoteNumber] == note.Channel);
                 var fillColor = isActive ? LerpToColor(baseColor, theme.ActiveHighlightColor, theme.ActiveNoteBlend) : baseColor;
                 var brush = new SolidColorBrush(fillColor);
 
@@ -223,7 +238,16 @@ public sealed class NoteVisualizerControl : Control
             IBrush keyBrush;
             if (channel >= 0)
             {
-                var keyBase = _channelColors[channel % 16];
+                Color keyBase;
+                if (_colorMode == NoteColorMode.Track && _trackColors.Length > 0)
+                {
+                    int track = _activeKeyTrack[note];
+                    keyBase = _trackColors[track >= 0 ? track % _trackColors.Length : 0];
+                }
+                else
+                {
+                    keyBase = _channelColors[channel % 16];
+                }
                 keyBrush = new SolidColorBrush(LerpToColor(keyBase, theme.ActiveHighlightColor, theme.ActiveWhiteKeyBlend));
             }
             else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))
@@ -248,7 +272,16 @@ public sealed class NoteVisualizerControl : Control
             IBrush keyBrush;
             if (channel >= 0)
             {
-                var keyBase = _channelColors[channel % 16];
+                Color keyBase;
+                if (_colorMode == NoteColorMode.Track && _trackColors.Length > 0)
+                {
+                    int track = _activeKeyTrack[note];
+                    keyBase = _trackColors[track >= 0 ? track % _trackColors.Length : 0];
+                }
+                else
+                {
+                    keyBase = _channelColors[channel % 16];
+                }
                 keyBrush = new SolidColorBrush(LerpToColor(keyBase, theme.ActiveHighlightColor, theme.ActiveBlackKeyBlend));
             }
             else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))

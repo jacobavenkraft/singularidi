@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Singularidi.ViewModels"
+        xmlns:conv="clr-namespace:Singularidi.Converters"
         x:Class="Singularidi.Views.ThemeEditorWindow"
         x:DataType="vm:ThemeEditorViewModel"
         Title="Theme Editor"
@@ -8,6 +9,10 @@
         MinWidth="600" MinHeight="500"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e">
+
+  <Window.Resources>
+    <conv:ColorModeToBooleanConverter x:Key="ColorModeToBool"/>
+  </Window.Resources>
 
   <DockPanel>
     <!-- Save / Cancel — always visible at bottom -->
@@ -55,23 +60,61 @@
 
         <Separator/>
 
-        <!-- Channel Colors -->
-        <TextBlock Text="Channel Colors (16)" Foreground="#cccccc" FontWeight="Bold"/>
-        <ItemsControl ItemsSource="{Binding ChannelColorEntries}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <WrapPanel Orientation="Horizontal"/>
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:ChannelColorViewModel">
-              <StackPanel Spacing="2" Margin="0,0,8,8">
-                <TextBlock Text="{Binding Label}" Foreground="#999999" FontSize="11"/>
-                <ColorPicker Color="{Binding Color}" Width="140"/>
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <!-- Note Color Mode -->
+        <TextBlock Text="Note Color Mode" Foreground="#cccccc" FontWeight="Bold"/>
+        <StackPanel Orientation="Horizontal" Spacing="12">
+          <RadioButton Content="MIDI Channel" GroupName="ColorMode"
+                       IsChecked="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Channel}" Foreground="#cccccc"/>
+          <RadioButton Content="MIDI Track" GroupName="ColorMode"
+                       IsChecked="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Track}" Foreground="#cccccc"/>
+        </StackPanel>
+
+        <Separator/>
+
+        <!-- Channel Colors (visible when Channel mode) -->
+        <StackPanel IsVisible="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Channel}" Spacing="8">
+          <TextBlock Text="Channel Colors (16)" Foreground="#cccccc" FontWeight="Bold"/>
+          <ItemsControl ItemsSource="{Binding ChannelColorEntries}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal"/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ChannelColorViewModel">
+                <StackPanel Spacing="2" Margin="0,0,8,8">
+                  <TextBlock Text="{Binding Label}" Foreground="#999999" FontSize="11"/>
+                  <ColorPicker Color="{Binding Color}" Width="140"/>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Track Colors (visible when Track mode) -->
+        <StackPanel IsVisible="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Track}" Spacing="8">
+          <TextBlock Text="Track Colors" Foreground="#cccccc" FontWeight="Bold"/>
+          <ItemsControl ItemsSource="{Binding TrackColorEntries}">
+            <ItemsControl.ItemsPanel>
+			  <ItemsPanelTemplate>
+			    <UniformGrid Columns="2"/>
+              </ItemsPanelTemplate> 
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TrackColorViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="8 2 8 2">
+                  <TextBlock Text="{Binding Label}" Foreground="#999999" VerticalAlignment="Center" Width="60"/>
+                  <ColorPicker Color="{Binding Color}" Width="140"/>
+                  <Button Content="Remove" Padding="8,4"
+                          Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveTrackColorCommand}"
+                          CommandParameter="{Binding}"/>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="+ Add Track Color" Padding="8,4" HorizontalAlignment="Left"
+                  Command="{Binding AddTrackColorCommand}"/>
+        </StackPanel>
 
         <Separator/>
 

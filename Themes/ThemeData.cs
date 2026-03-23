@@ -14,6 +14,7 @@ public class ThemeData : IVisualTheme
     public string Background { get; set; } = "#0D0D0D";
     public string GuideLine { get; set; } = "#19FFFFFF";
     public NoteShape NoteShape { get; set; } = NoteShape.Rectangular;
+    public NoteColorMode ColorMode { get; set; } = NoteColorMode.Channel;
 
     public string[] ChannelColorValues { get; set; } =
     [
@@ -22,6 +23,8 @@ public class ThemeData : IVisualTheme
         "#FF8080", "#80FF80", "#80FFFF", "#8080FF",
         "#FF80C0", "#FFC080", "#C0FF80", "#C080FF",
     ];
+
+    public List<string>? TrackColorValues { get; set; }
 
     public Dictionary<int, string>? NoteColorOverrideValues { get; set; }
 
@@ -44,6 +47,11 @@ public class ThemeData : IVisualTheme
         ChannelColorValues.Select(Color.Parse).ToArray();
 
     [JsonIgnore]
+    public Color[] TrackColors =>
+        TrackColorValues?.Select(Color.Parse).ToArray()
+        ?? ChannelColorValues.Select(Color.Parse).ToArray();
+
+    [JsonIgnore]
     public Dictionary<int, Color>? NoteColorOverrides =>
         NoteColorOverrideValues?.ToDictionary(kv => kv.Key, kv => Color.Parse(kv.Value));
 
@@ -64,7 +72,9 @@ public class ThemeData : IVisualTheme
         Background = Background,
         GuideLine = GuideLine,
         NoteShape = NoteShape,
+        ColorMode = ColorMode,
         ChannelColorValues = (string[])ChannelColorValues.Clone(),
+        TrackColorValues = TrackColorValues != null ? new List<string>(TrackColorValues) : null,
         NoteColorOverrideValues = NoteColorOverrideValues != null
             ? new Dictionary<int, string>(NoteColorOverrideValues)
             : null,

@@ -24,6 +24,9 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDotBlock))]
     private NoteShape _noteShape;
 
+    [ObservableProperty]
+    private NoteColorMode _colorMode;
+
     public bool IsRectangular
     {
         get => NoteShape == NoteShape.Rectangular;
@@ -55,6 +58,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
     private float _activeBlackKeyBlend;
 
     public ObservableCollection<ChannelColorViewModel> ChannelColorEntries { get; } = new();
+    public ObservableCollection<TrackColorViewModel> TrackColorEntries { get; } = new();
     public ObservableCollection<ColorOverrideEntry> NoteOverrides { get; } = new();
     public ObservableCollection<ColorOverrideEntry> KeyOverrides { get; } = new();
 
@@ -65,6 +69,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
         _background = Color.Parse(source.Background);
         _guideLine = Color.Parse(source.GuideLine);
         _noteShape = source.NoteShape;
+        _colorMode = source.ColorMode;
         _whiteKey = Color.Parse(source.WhiteKey);
         _blackKey = Color.Parse(source.BlackKey);
         _activeHighlight = Color.Parse(source.ActiveHighlight);
@@ -74,6 +79,10 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
 
         for (int i = 0; i < 16; i++)
             ChannelColorEntries.Add(new ChannelColorViewModel(i, Color.Parse(source.ChannelColorValues[i])));
+
+        if (source.TrackColorValues != null)
+            for (int i = 0; i < source.TrackColorValues.Count; i++)
+                TrackColorEntries.Add(new TrackColorViewModel(i, Color.Parse(source.TrackColorValues[i])));
 
         if (source.NoteColorOverrideValues != null)
             foreach (var kv in source.NoteColorOverrideValues)
@@ -99,6 +108,34 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
     [RelayCommand]
     private void Cancel() => _close(null);
 
+    partial void OnColorModeChanged(NoteColorMode value)
+    {
+        if (value == NoteColorMode.Track && TrackColorEntries.Count == 0)
+        {
+            for (int i = 0; i < ChannelColorEntries.Count; i++)
+                TrackColorEntries.Add(new TrackColorViewModel(i, ChannelColorEntries[i].Color));
+        }
+    }
+
+    [RelayCommand]
+    private void AddTrackColor()
+    {
+        int index = TrackColorEntries.Count;
+        var defaultColor = ChannelColorEntries[index % 16].Color;
+        TrackColorEntries.Add(new TrackColorViewModel(index, defaultColor));
+    }
+
+    [RelayCommand]
+    private void RemoveTrackColor(TrackColorViewModel entry)
+    {
+        TrackColorEntries.Remove(entry);
+        // Re-index remaining entries
+        var items = TrackColorEntries.Select(e => e.Color).ToList();
+        TrackColorEntries.Clear();
+        for (int i = 0; i < items.Count; i++)
+            TrackColorEntries.Add(new TrackColorViewModel(i, items[i]));
+    }
+
     [RelayCommand]
     private void AddNoteOverride() =>
         NoteOverrides.Add(new ColorOverrideEntry { NoteNumber = 60m, Color = Colors.White });
@@ -123,7 +160,11 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
             Background = FormatColor(Background),
             GuideLine = FormatColor(GuideLine),
             NoteShape = NoteShape,
+            ColorMode = ColorMode,
             ChannelColorValues = ChannelColorEntries.Select(e => FormatColor(e.Color)).ToArray(),
+            TrackColorValues = TrackColorEntries.Count > 0
+                ? TrackColorEntries.Select(e => FormatColor(e.Color)).ToList()
+                : null,
             WhiteKey = FormatColor(WhiteKey),
             BlackKey = FormatColor(BlackKey),
             ActiveHighlight = FormatColor(ActiveHighlight),
@@ -157,6 +198,21 @@ public partial class ChannelColorViewModel : ObservableObject
     public ChannelColorViewModel(int channelIndex, Color color)
     {
         ChannelIndex = channelIndex;
+        _color = color;
+    }
+}
+
+public partial class TrackColorViewModel : ObservableObject
+{
+    public int TrackIndex { get; }
+    public string Label => $"Track {TrackIndex}";
+
+    [ObservableProperty]
+    private Color _color;
+
+    public TrackColorViewModel(int trackIndex, Color color)
+    {
+        TrackIndex = trackIndex;
         _color = color;
     }
 }

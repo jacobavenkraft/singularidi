@@ -5,5 +5,6 @@ public sealed record NoteEvent(
     int Channel,         // 0–15
     int Velocity,        // 0–127
     double StartSeconds,
-    double EndSeconds
+    double EndSeconds,
+    int Track = -1       // MIDI track chunk index
 );

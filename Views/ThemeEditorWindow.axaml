@@ -13,197 +13,203 @@
   <Window.Resources>
     <conv:ColorModeToBooleanConverter x:Key="ColorModeToBool"/>
   </Window.Resources>
+  <Window.Styles>
+    <Style Selector="TextBlock.Title">
+      <Setter Property="Foreground" Value="#CCCCCC"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+  </Window.Styles>
+  <Grid RowDefinitions="Auto, *, Auto">
+    <Border Grid.Row="0" Padding="16 0 16 16" >
+      <StackPanel Spacing="12">
+        <!-- Theme Name -->
+        <TextBlock Text="Theme Name" Classes="Title"/>
+        <TextBox Text="{Binding Name}" Watermark="Enter theme name"/>
+        <!--<Separator/>-->
+      </StackPanel>
+    </Border>
 
-  <DockPanel>
+    <!-- Scrollable content fills remaining space -->
+    <Grid Grid.Row="1">
+      <ScrollViewer Padding="16">
+        <StackPanel Spacing="12">
+
+          <!-- Background & Guides -->
+          <TextBlock Text="Background" Classes="Title"/>
+          <StackPanel Orientation="Horizontal" Spacing="16">
+            <StackPanel Spacing="4">
+              <TextBlock Text="Background Color" Foreground="#999999" FontSize="11"/>
+              <ColorPicker Color="{Binding Background}" Width="200" />
+            </StackPanel>
+            <StackPanel Spacing="4">
+              <TextBlock Text="Guide Line Color" Foreground="#999999" FontSize="11"/>
+              <ColorPicker Color="{Binding GuideLine}" Width="200" />
+            </StackPanel>
+          </StackPanel>
+
+          <Separator/>
+
+          <!-- Note Shape -->
+          <TextBlock Text="Note Shape" Classes="Title"/>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <RadioButton Content="Rectangular" GroupName="NoteShape"
+                         IsChecked="{Binding IsRectangular}" Foreground="#cccccc"/>
+            <RadioButton Content="Dot Block (rounded)" GroupName="NoteShape"
+                         IsChecked="{Binding IsDotBlock}" Foreground="#cccccc"/>
+          </StackPanel>
+
+          <Separator/>
+
+          <!-- Note Color Mode -->
+          <TextBlock Text="Note Color Mode" Classes="Title"/>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <RadioButton Content="MIDI Channel" GroupName="ColorMode"
+                         IsChecked="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Channel}" Foreground="#cccccc"/>
+            <RadioButton Content="MIDI Track" GroupName="ColorMode"
+                         IsChecked="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Track}" Foreground="#cccccc"/>
+          </StackPanel>
+
+          <Separator/>
+
+          <!-- Channel Colors (visible when Channel mode) -->
+          <StackPanel IsVisible="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Channel}" Spacing="8">
+            <TextBlock Text="Channel Colors (16)" Classes="Title"/>
+            <ItemsControl ItemsSource="{Binding ChannelColorEntries}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ChannelColorViewModel">
+                  <StackPanel Spacing="2" Margin="0,0,8,8">
+                    <TextBlock Text="{Binding Label}" Foreground="#999999" FontSize="11"/>
+                    <ColorPicker Color="{Binding Color}" Width="140"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- Track Colors (visible when Track mode) -->
+          <StackPanel IsVisible="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Track}" Spacing="8">
+            <TextBlock Text="Track Colors" Classes="Title"/>
+            <ItemsControl ItemsSource="{Binding TrackColorEntries}">
+              <ItemsControl.ItemsPanel>
+			    <ItemsPanelTemplate>
+			      <UniformGrid Columns="2"/>
+                </ItemsPanelTemplate> 
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TrackColorViewModel">
+                  <StackPanel Orientation="Horizontal" Spacing="8" Margin="8 2 8 2">
+                    <TextBlock Text="{Binding Label}" Foreground="#999999" VerticalAlignment="Center" Width="60"/>
+                    <ColorPicker Color="{Binding Color}" Width="140"/>
+                    <Button Content="Remove" Padding="8,4"
+                            Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveTrackColorCommand}"
+                            CommandParameter="{Binding}"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="+ Add Track Color" Padding="8,4" HorizontalAlignment="Left"
+                    Command="{Binding AddTrackColorCommand}"/>
+          </StackPanel>
+
+          <Separator/>
+
+          <!-- Note Color Overrides -->
+          <TextBlock Text="Note Color Overrides (per MIDI note)" Classes="Title"/>
+          <ItemsControl ItemsSource="{Binding NoteOverrides}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ColorOverrideEntry">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                  <TextBlock Text="Note:" Foreground="#999999" VerticalAlignment="Center"/>
+                  <NumericUpDown Minimum="0" Maximum="127" Value="{Binding NoteNumber}"
+                                 Width="80" FormatString="0"/>
+                  <ColorPicker Color="{Binding Color}" Width="140"/>
+                  <Button Content="Remove" Padding="8,4"
+                          Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveNoteOverrideCommand}"
+                          CommandParameter="{Binding}"/>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="+ Add Note Override" Padding="8,4" HorizontalAlignment="Left"
+                  Command="{Binding AddNoteOverrideCommand}"/>
+
+          <Separator/>
+
+          <!-- Piano Keys -->
+          <TextBlock Text="Piano Key Colors" Classes="Title"/>
+          <StackPanel Orientation="Horizontal" Spacing="16">
+            <StackPanel Spacing="4">
+              <TextBlock Text="White Key Color" Foreground="#999999" FontSize="11"/>
+              <ColorPicker Color="{Binding WhiteKey}" Width="200"/>
+            </StackPanel>
+            <StackPanel Spacing="4">
+              <TextBlock Text="Black Key Color" Foreground="#999999" FontSize="11"/>
+              <ColorPicker Color="{Binding BlackKey}" Width="200"/>
+            </StackPanel>
+          </StackPanel>
+
+          <!-- Key Color Overrides -->
+          <TextBlock Text="Key Color Overrides (per piano key)" Classes="Title"
+                     Margin="0,8,0,0"/>
+          <ItemsControl ItemsSource="{Binding KeyOverrides}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ColorOverrideEntry">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                  <TextBlock Text="Note:" Foreground="#999999" VerticalAlignment="Center"/>
+                  <NumericUpDown Minimum="0" Maximum="127" Value="{Binding NoteNumber}"
+                                 Width="80" FormatString="0"/>
+                  <ColorPicker Color="{Binding Color}" Width="140"/>
+                  <Button Content="Remove" Padding="8,4"
+                          Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveKeyOverrideCommand}"
+                          CommandParameter="{Binding}"/>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button Content="+ Add Key Override" Padding="8,4" HorizontalAlignment="Left"
+                  Command="{Binding AddKeyOverrideCommand}"/>
+
+          <Separator/>
+
+          <!-- Active Highlight -->
+          <TextBlock Text="Active Highlight" Classes="Title"/>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Highlight Color" Foreground="#999999" FontSize="11"/>
+            <ColorPicker Color="{Binding ActiveHighlight}" Width="200"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,0">
+            <StackPanel Spacing="4" Width="180">
+              <TextBlock Text="Note Blend" Foreground="#999999" FontSize="11"/>
+              <Slider Minimum="0" Maximum="1" Value="{Binding ActiveNoteBlend}"
+                      TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+            </StackPanel>
+            <StackPanel Spacing="4" Width="180">
+              <TextBlock Text="White Key Blend" Foreground="#999999" FontSize="11"/>
+              <Slider Minimum="0" Maximum="1" Value="{Binding ActiveWhiteKeyBlend}"
+                      TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+            </StackPanel>
+            <StackPanel Spacing="4" Width="180">
+              <TextBlock Text="Black Key Blend" Foreground="#999999" FontSize="11"/>
+              <Slider Minimum="0" Maximum="1" Value="{Binding ActiveBlackKeyBlend}"
+                      TickFrequency="0.05" IsSnapToTickEnabled="True"/>
+            </StackPanel>
+          </StackPanel>
+
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
     <!-- Save / Cancel — always visible at bottom -->
-    <Border DockPanel.Dock="Bottom" Padding="16,8" Background="#1e1e1e"
+    <Border Grid.Row="2" Padding="16,8" Background="#1e1e1e"
             BorderBrush="#333333" BorderThickness="0,1,0,0">
       <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
         <Button Content="Save Theme" Padding="16,6" Command="{Binding SaveCommand}"/>
         <Button Content="Cancel" Padding="16,6" Command="{Binding CancelCommand}"/>
       </StackPanel>
     </Border>
-
-    <Border DockPanel.Dock="Top" Padding="16 0">
-      <StackPanel Spacing="12">
-        <!-- Theme Name -->
-        <TextBlock Text="Theme Name" Foreground="#cccccc" FontWeight="Bold"/>
-        <TextBox Text="{Binding Name}" Watermark="Enter theme name"/>
-        <Separator/>
-      </StackPanel>
-     
-    </Border>
-    <!-- Scrollable content fills remaining space -->
-    <ScrollViewer Padding="16">
-      <StackPanel Spacing="12">
-
-        <!-- Background & Guides -->
-        <TextBlock Text="Background" Foreground="#cccccc" FontWeight="Bold"/>
-        <StackPanel Orientation="Horizontal" Spacing="16">
-          <StackPanel Spacing="4">
-            <TextBlock Text="Background Color" Foreground="#999999" FontSize="11"/>
-            <ColorPicker Color="{Binding Background}" Width="200" />
-          </StackPanel>
-          <StackPanel Spacing="4">
-            <TextBlock Text="Guide Line Color" Foreground="#999999" FontSize="11"/>
-            <ColorPicker Color="{Binding GuideLine}" Width="200" />
-          </StackPanel>
-        </StackPanel>
-
-        <Separator/>
-
-        <!-- Note Shape -->
-        <TextBlock Text="Note Shape" Foreground="#cccccc" FontWeight="Bold"/>
-        <StackPanel Orientation="Horizontal" Spacing="12">
-          <RadioButton Content="Rectangular" GroupName="NoteShape"
-                       IsChecked="{Binding IsRectangular}" Foreground="#cccccc"/>
-          <RadioButton Content="Dot Block (rounded)" GroupName="NoteShape"
-                       IsChecked="{Binding IsDotBlock}" Foreground="#cccccc"/>
-        </StackPanel>
-
-        <Separator/>
-
-        <!-- Note Color Mode -->
-        <TextBlock Text="Note Color Mode" Foreground="#cccccc" FontWeight="Bold"/>
-        <StackPanel Orientation="Horizontal" Spacing="12">
-          <RadioButton Content="MIDI Channel" GroupName="ColorMode"
-                       IsChecked="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Channel}" Foreground="#cccccc"/>
-          <RadioButton Content="MIDI Track" GroupName="ColorMode"
-                       IsChecked="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Track}" Foreground="#cccccc"/>
-        </StackPanel>
-
-        <Separator/>
-
-        <!-- Channel Colors (visible when Channel mode) -->
-        <StackPanel IsVisible="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Channel}" Spacing="8">
-          <TextBlock Text="Channel Colors (16)" Foreground="#cccccc" FontWeight="Bold"/>
-          <ItemsControl ItemsSource="{Binding ChannelColorEntries}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <WrapPanel Orientation="Horizontal"/>
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:ChannelColorViewModel">
-                <StackPanel Spacing="2" Margin="0,0,8,8">
-                  <TextBlock Text="{Binding Label}" Foreground="#999999" FontSize="11"/>
-                  <ColorPicker Color="{Binding Color}" Width="140"/>
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </StackPanel>
-
-        <!-- Track Colors (visible when Track mode) -->
-        <StackPanel IsVisible="{Binding ColorMode, Converter={StaticResource ColorModeToBool}, ConverterParameter=Track}" Spacing="8">
-          <TextBlock Text="Track Colors" Foreground="#cccccc" FontWeight="Bold"/>
-          <ItemsControl ItemsSource="{Binding TrackColorEntries}">
-            <ItemsControl.ItemsPanel>
-			  <ItemsPanelTemplate>
-			    <UniformGrid Columns="2"/>
-              </ItemsPanelTemplate> 
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:TrackColorViewModel">
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="8 2 8 2">
-                  <TextBlock Text="{Binding Label}" Foreground="#999999" VerticalAlignment="Center" Width="60"/>
-                  <ColorPicker Color="{Binding Color}" Width="140"/>
-                  <Button Content="Remove" Padding="8,4"
-                          Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveTrackColorCommand}"
-                          CommandParameter="{Binding}"/>
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <Button Content="+ Add Track Color" Padding="8,4" HorizontalAlignment="Left"
-                  Command="{Binding AddTrackColorCommand}"/>
-        </StackPanel>
-
-        <Separator/>
-
-        <!-- Note Color Overrides -->
-        <TextBlock Text="Note Color Overrides (per MIDI note)" Foreground="#cccccc" FontWeight="Bold"/>
-        <ItemsControl ItemsSource="{Binding NoteOverrides}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:ColorOverrideEntry">
-              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
-                <TextBlock Text="Note:" Foreground="#999999" VerticalAlignment="Center"/>
-                <NumericUpDown Minimum="0" Maximum="127" Value="{Binding NoteNumber}"
-                               Width="80" FormatString="0"/>
-                <ColorPicker Color="{Binding Color}" Width="140"/>
-                <Button Content="Remove" Padding="8,4"
-                        Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveNoteOverrideCommand}"
-                        CommandParameter="{Binding}"/>
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        <Button Content="+ Add Note Override" Padding="8,4" HorizontalAlignment="Left"
-                Command="{Binding AddNoteOverrideCommand}"/>
-
-        <Separator/>
-
-        <!-- Piano Keys -->
-        <TextBlock Text="Piano Key Colors" Foreground="#cccccc" FontWeight="Bold"/>
-        <StackPanel Orientation="Horizontal" Spacing="16">
-          <StackPanel Spacing="4">
-            <TextBlock Text="White Key Color" Foreground="#999999" FontSize="11"/>
-            <ColorPicker Color="{Binding WhiteKey}" Width="200"/>
-          </StackPanel>
-          <StackPanel Spacing="4">
-            <TextBlock Text="Black Key Color" Foreground="#999999" FontSize="11"/>
-            <ColorPicker Color="{Binding BlackKey}" Width="200"/>
-          </StackPanel>
-        </StackPanel>
-
-        <!-- Key Color Overrides -->
-        <TextBlock Text="Key Color Overrides (per piano key)" Foreground="#cccccc" FontWeight="Bold"
-                   Margin="0,8,0,0"/>
-        <ItemsControl ItemsSource="{Binding KeyOverrides}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:ColorOverrideEntry">
-              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
-                <TextBlock Text="Note:" Foreground="#999999" VerticalAlignment="Center"/>
-                <NumericUpDown Minimum="0" Maximum="127" Value="{Binding NoteNumber}"
-                               Width="80" FormatString="0"/>
-                <ColorPicker Color="{Binding Color}" Width="140"/>
-                <Button Content="Remove" Padding="8,4"
-                        Command="{Binding $parent[ItemsControl].((vm:ThemeEditorViewModel)DataContext).RemoveKeyOverrideCommand}"
-                        CommandParameter="{Binding}"/>
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        <Button Content="+ Add Key Override" Padding="8,4" HorizontalAlignment="Left"
-                Command="{Binding AddKeyOverrideCommand}"/>
-
-        <Separator/>
-
-        <!-- Active Highlight -->
-        <TextBlock Text="Active Highlight" Foreground="#cccccc" FontWeight="Bold"/>
-        <StackPanel Spacing="4">
-          <TextBlock Text="Highlight Color" Foreground="#999999" FontSize="11"/>
-          <ColorPicker Color="{Binding ActiveHighlight}" Width="200"/>
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,8,0,0">
-          <StackPanel Spacing="4" Width="180">
-            <TextBlock Text="Note Blend" Foreground="#999999" FontSize="11"/>
-            <Slider Minimum="0" Maximum="1" Value="{Binding ActiveNoteBlend}"
-                    TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-          </StackPanel>
-          <StackPanel Spacing="4" Width="180">
-            <TextBlock Text="White Key Blend" Foreground="#999999" FontSize="11"/>
-            <Slider Minimum="0" Maximum="1" Value="{Binding ActiveWhiteKeyBlend}"
-                    TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-          </StackPanel>
-          <StackPanel Spacing="4" Width="180">
-            <TextBlock Text="Black Key Blend" Foreground="#999999" FontSize="11"/>
-            <Slider Minimum="0" Maximum="1" Value="{Binding ActiveBlackKeyBlend}"
-                    TickFrequency="0.05" IsSnapToTickEnabled="True"/>
-          </StackPanel>
-        </StackPanel>
-
-      </StackPanel>
-    </ScrollViewer>
-  </DockPanel>
+  </Grid>
 </Window>

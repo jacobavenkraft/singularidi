@@ -1,9 +1,11 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:vm="clr-namespace:Singularidi.ViewModels"
         xmlns:conv="clr-namespace:Singularidi.Converters"
         x:Class="Singularidi.Views.ThemeEditorWindow"
         x:DataType="vm:ThemeEditorViewModel"
+        d:DesignHeight="1200" d:DesignWidth="700"
         Title="Theme Editor"
         Width="700" Height="900"
         MinWidth="600" MinHeight="500"
@@ -30,9 +32,10 @@
     </Border>
 
     <!-- Scrollable content fills remaining space -->
-    <Grid Grid.Row="1">
-      <ScrollViewer Padding="16">
-        <StackPanel Spacing="12">
+    <ScrollViewer Grid.Row="1"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="12" Margin="16">
 
           <!-- Background & Guides -->
           <TextBlock Text="Background" Classes="Title"/>
@@ -178,7 +181,7 @@
 
           <!-- Active Highlight -->
           <TextBlock Text="Active Highlight" Classes="Title"/>
-          <StackPanel Spacing="4">
+          <StackPanel HorizontalAlignment="Left" Spacing="4">
             <TextBlock Text="Highlight Color" Foreground="#999999" FontSize="11"/>
             <ColorPicker Color="{Binding ActiveHighlight}" Width="200"/>
           </StackPanel>
@@ -201,8 +204,7 @@
           </StackPanel>
 
         </StackPanel>
-      </ScrollViewer>
-    </Grid>
+    </ScrollViewer>
     <!-- Save / Cancel — always visible at bottom -->
     <Border Grid.Row="2" Padding="16,8" Background="#1e1e1e"
             BorderBrush="#333333" BorderThickness="0,1,0,0">

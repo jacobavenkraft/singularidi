@@ -11,7 +11,8 @@
 
   <Window.Styles>
     <!-- Style for dynamically-generated child MenuItems within .dynamic parents -->
-    <Style Selector="MenuItem.dynamic MenuItem">
+    <Style Selector="MenuItem.dynamic MenuItem"
+           x:DataType="vm:MenuItemViewModel">
       <Setter Property="Header" Value="{Binding Header}"/>
       <Setter Property="Command" Value="{Binding Command}"/>
       <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>

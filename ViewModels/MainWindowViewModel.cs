@@ -60,7 +60,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [
         new VerticalFallEngine(),
         new HorizontalCrawlEngine(),
-        new ConicalCrawlEngine(),
     ];
 
     public ObservableCollection<MenuItemViewModel> ThemeMenuItems { get; } = new();

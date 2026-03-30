@@ -25,6 +25,9 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
     private NoteShape _noteShape;
 
     [ObservableProperty]
+    private double _noteCornerRadius;
+
+    [ObservableProperty]
     private NoteColorMode _colorMode;
 
     public bool IsRectangular
@@ -69,6 +72,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
         _background = Color.Parse(source.Background);
         _guideLine = Color.Parse(source.GuideLine);
         _noteShape = source.NoteShape;
+        _noteCornerRadius = source.NoteCornerRadius;
         _colorMode = source.ColorMode;
         _whiteKey = Color.Parse(source.WhiteKey);
         _blackKey = Color.Parse(source.BlackKey);
@@ -160,6 +164,7 @@ public sealed partial class ThemeEditorViewModel : ObservableObject
             Background = FormatColor(Background),
             GuideLine = FormatColor(GuideLine),
             NoteShape = NoteShape,
+            NoteCornerRadius = NoteCornerRadius,
             ColorMode = ColorMode,
             ChannelColorValues = ChannelColorEntries.Select(e => FormatColor(e.Color)).ToArray(),
             TrackColorValues = TrackColorEntries.Count > 0

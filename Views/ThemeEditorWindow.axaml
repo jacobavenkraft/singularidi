@@ -60,6 +60,15 @@
             <RadioButton Content="Dot Block (rounded)" GroupName="NoteShape"
                          IsChecked="{Binding IsDotBlock}" Foreground="#cccccc"/>
           </StackPanel>
+          <StackPanel IsVisible="{Binding IsRectangular}" Spacing="4" Margin="0,4,0,0">
+            <TextBlock Text="Corner Radius" Foreground="#999999" FontSize="11"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Slider Minimum="0" Maximum="20" Value="{Binding NoteCornerRadius}"
+                      Width="200" TickFrequency="0.5" IsSnapToTickEnabled="True"/>
+              <TextBlock Text="{Binding NoteCornerRadius, StringFormat='{}{0:F1}'}"
+                         Foreground="#cccccc" VerticalAlignment="Center" FontSize="12"/>
+            </StackPanel>
+          </StackPanel>
 
           <Separator/>
 

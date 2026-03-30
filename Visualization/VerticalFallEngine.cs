@@ -126,7 +126,9 @@ public sealed class VerticalFallEngine : IVisualizationEngine
             double x = _layout.XCenter[note.NoteNumber] - nw / 2;
             var rect = new Rect(x, yTop, nw, rectH);
 
-            double cornerRadius = theme.NoteShape == NoteShape.DotBlock ? nw / 2 : 2;
+            double cornerRadius = theme.NoteShape == NoteShape.DotBlock
+                ? nw / 2
+                : Math.Min(theme.NoteCornerRadius, nw / 2);
             ctx.DrawRectangle(brush, null, rect, cornerRadius, cornerRadius);
         }
 

@@ -203,15 +203,54 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
 
             var brush = new SolidColorBrush(fillColor);
 
-            // Draw trapezoid
+            // Draw trapezoid (with optional corner radius for Rectangular shape)
+            double cr = theme.NoteShape == NoteShape.Rectangular
+                ? theme.NoteCornerRadius : 0;
+
             var geo = new StreamGeometry();
             using (var sgCtx = geo.Open())
             {
-                sgCtx.BeginFigure(new Point(cxNear - halfWNear, cyNear), true);
-                sgCtx.LineTo(new Point(cxNear + halfWNear, cyNear));
-                sgCtx.LineTo(new Point(cxFar + halfWFar, cyFar));
-                sgCtx.LineTo(new Point(cxFar - halfWFar, cyFar));
-                sgCtx.EndFigure(true);
+                if (cr <= 0.5 || theme.NoteShape == NoteShape.DotBlock)
+                {
+                    // Sharp corners
+                    sgCtx.BeginFigure(new Point(cxNear - halfWNear, cyNear), true);
+                    sgCtx.LineTo(new Point(cxNear + halfWNear, cyNear));
+                    sgCtx.LineTo(new Point(cxFar + halfWFar, cyFar));
+                    sgCtx.LineTo(new Point(cxFar - halfWFar, cyFar));
+                    sgCtx.EndFigure(true);
+                }
+                else
+                {
+                    // Rounded corners — radius scaled by perspective at each end
+                    double scaleNear = WidthScale3D(zN);
+                    double scaleFar = WidthScale3D(zF);
+                    double rNear = Math.Min(cr * scaleNear, halfWNear);
+                    double rFar = Math.Min(cr * scaleFar, halfWFar);
+
+                    // Near edge (bottom, closest): left-bottom to right-bottom
+                    double nL = cxNear - halfWNear, nR = cxNear + halfWNear;
+                    // Far edge (top, farthest): left-top to right-top
+                    double fL = cxFar - halfWFar, fR = cxFar + halfWFar;
+                    double nY = cyNear, fY = cyFar;
+                    double nearH = Math.Abs(nY - fY);
+                    rNear = Math.Min(rNear, nearH / 2);
+                    rFar = Math.Min(rFar, nearH / 2);
+
+                    var sizeNear = new Size(rNear, rNear);
+                    var sizeFar = new Size(rFar, rFar);
+
+                    // Start at near-left + rNear offset, go clockwise
+                    sgCtx.BeginFigure(new Point(nL + rNear, nY), true);
+                    sgCtx.LineTo(new Point(nR - rNear, nY));
+                    sgCtx.ArcTo(new Point(nR, nY - rNear), sizeNear, 0, false, SweepDirection.CounterClockwise);
+                    sgCtx.LineTo(new Point(fR, fY + rFar));
+                    sgCtx.ArcTo(new Point(fR - rFar, fY), sizeFar, 0, false, SweepDirection.CounterClockwise);
+                    sgCtx.LineTo(new Point(fL + rFar, fY));
+                    sgCtx.ArcTo(new Point(fL, fY + rFar), sizeFar, 0, false, SweepDirection.CounterClockwise);
+                    sgCtx.LineTo(new Point(nL, nY - rNear));
+                    sgCtx.ArcTo(new Point(nL + rNear, nY), sizeNear, 0, false, SweepDirection.CounterClockwise);
+                    sgCtx.EndFigure(true);
+                }
             }
             ctx.DrawGeometry(brush, null, geo);
         }

@@ -14,6 +14,7 @@ public class ThemeData : IVisualTheme
     public string Background { get; set; } = "#0D0D0D";
     public string GuideLine { get; set; } = "#19FFFFFF";
     public NoteShape NoteShape { get; set; } = NoteShape.Rectangular;
+    public double NoteCornerRadius { get; set; } = 2.0;
     public NoteColorMode ColorMode { get; set; } = NoteColorMode.Channel;
 
     public string[] ChannelColorValues { get; set; } =
@@ -72,6 +73,7 @@ public class ThemeData : IVisualTheme
         Background = Background,
         GuideLine = GuideLine,
         NoteShape = NoteShape,
+        NoteCornerRadius = NoteCornerRadius,
         ColorMode = ColorMode,
         ChannelColorValues = (string[])ChannelColorValues.Clone(),
         TrackColorValues = TrackColorValues != null ? new List<string>(TrackColorValues) : null,

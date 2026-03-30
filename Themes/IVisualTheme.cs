@@ -11,6 +11,9 @@ public interface IVisualTheme
 
     NoteShape NoteShape { get; }
 
+    /// <summary>Corner radius for rectangular notes (0 = sharp corners). Ignored for DotBlock.</summary>
+    double NoteCornerRadius { get; }
+
     NoteColorMode ColorMode { get; }
 
     /// <summary>16 colors, one per MIDI channel (0–15).</summary>

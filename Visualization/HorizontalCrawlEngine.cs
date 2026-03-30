@@ -5,6 +5,16 @@ using Singularidi.Themes;
 
 namespace Singularidi.Visualization;
 
+/// <summary>
+/// Guitar Hero-style 3D perspective visualization.
+///
+/// Uses true 1/z perspective projection. Notes exist on a flat ground plane in world space
+/// and travel at constant world-space velocity toward the camera. The 1/z divide naturally
+/// produces correct perspective acceleration (slow at horizon, fast near camera).
+///
+/// Conceptually identical to the VerticalFall view but with the camera tilted from
+/// top-down to an angled view looking down the road toward the horizon.
+/// </summary>
 public sealed class HorizontalCrawlEngine : IVisualizationEngine
 {
     public string Name => "Horizontal Crawl";
@@ -25,24 +35,31 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
 
     // ── Configurable layout ─────────────────────────────────────────────
 
-    /// <summary>Fraction of vertical space above the horizon (sky). Default 0.20 (20%).</summary>
+    /// <summary>Fraction of vertical space above the vanishing point (sky). Default 0.20 (20%).</summary>
     public double SkyFraction { get; set; } = 0.20;
 
-    /// <summary>Fraction of the road (from piano to vanishing point) at which guide lines stop.
-    /// 1.0 = lines reach the vanishing point; 0.85 = lines stop at 85% of the way. Default 0.90.</summary>
-    public double HorizonDepth { get; set; } = 0.90;
+    /// <summary>Ratio of the horizon distance to the piano distance in world space.
+    /// Higher values = more dramatic perspective convergence. Default 12.0.</summary>
+    public double DepthRatio { get; set; } = 12.0;
 
-    /// <summary>Fraction of the road that the piano keys occupy at the bottom. Default 0.10.</summary>
-    public double PianoDepthFraction { get; set; } = 0.10;
+    /// <summary>Desired fraction of screen height the piano keys occupy. Default 0.12 (12%).
+    /// The world-space Z for the piano's far edge is back-computed so the keys take up
+    /// exactly this much vertical screen space regardless of DepthRatio.</summary>
+    public double PianoScreenFraction { get; set; } = 0.12;
 
-    /// <summary>Power curve exponent for perspective acceleration. Values &gt; 1 make notes
-    /// crawl slowly at the horizon and accelerate toward the viewer. Default 2.0.</summary>
-    public double PerspectivePower { get; set; } = 2.0;
+    /// <summary>Controls how aggressively guide lines fade to prevent moiré.
+    /// Range 0.0–1.0. At 0.0 no fading is applied (all lines fully visible).
+    /// At 1.0 maximum fading — lines disappear early. Default 0.5.</summary>
+    public double GuideLineFade { get; set; } = 0.9;
 
-    // ── Derived layout values (recalculated per frame from the configurables) ──
-    // vanishX, vanishY = the perspective vanishing point
-    // roadBottom = Y coordinate of the bottom of the road (top of screen = 0)
-    // These are set at the start of Render().
+    // ── 3D projection constants ─────────────────────────────────────────
+    // World space: Z = distance from camera along viewing axis.
+    //   Znear = piano distance from camera (fixed at 1.0)
+    //   Zhorizon = Znear * DepthRatio (where guide lines end / notes appear)
+    // Notes move at constant velocity in world Z, from Zhorizon toward Znear.
+    // Screen projection uses 1/z: screenPos = vanish + (worldX - vanish) * Znear / worldZ
+
+    private const double Znear = 1.0;
 
     public void OnSizeChanged(double width, double height)
     {
@@ -66,23 +83,23 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
     }
 
     /// <summary>
-    /// Projects a point onto the road surface using simple linear interpolation
-    /// along the line from (noteX, roadBottom) to (vanishX, vanishY).
-    /// depth=0 → at the piano (bottom), depth=1 → at the vanishing point.
-    /// This guarantees notes lie exactly on their guide lines.
+    /// Projects a world-space point at (worldX, worldZ) onto the screen using 1/z perspective.
+    /// worldX is the note's horizontal position (same as PianoLayout.XCenter).
+    /// worldZ is the distance from the camera (Znear = at the piano, larger = further away).
     /// </summary>
-    private static (double x, double y) Project(
-        double noteX, double depth,
+    private static (double screenX, double screenY) Project3D(
+        double worldX, double worldZ,
         double vanishX, double vanishY, double roadBottom)
     {
-        double d = Math.Clamp(depth, 0, 1);
-        double x = noteX + (vanishX - noteX) * d;
-        double y = roadBottom + (vanishY - roadBottom) * d;
-        return (x, y);
+        double zClamped = Math.Max(worldZ, 0.001); // avoid division by zero
+        double scale = Znear / zClamped;           // 1/z perspective divide
+        double screenX = vanishX + (worldX - vanishX) * scale;
+        double screenY = vanishY + (roadBottom - vanishY) * scale;
+        return (screenX, screenY);
     }
 
-    /// <summary>Width scale factor at a given depth. 1.0 at bottom, 0.0 at vanishing point.</summary>
-    private static double WidthScale(double depth) => 1.0 - Math.Clamp(depth, 0, 1);
+    /// <summary>Width scale at a given worldZ. Full width at Znear, shrinks with distance.</summary>
+    private static double WidthScale3D(double worldZ) => Znear / Math.Max(worldZ, 0.001);
 
     public void Render(
         DrawingContext ctx,
@@ -98,72 +115,110 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         _layout.RebuildIfNeeded(w);
         EnsureThemeCaches(theme);
 
-        // Layout: sky occupies the top SkyFraction, road occupies the rest
         double vanishX = w / 2;
-        double vanishY = h * SkyFraction; // vanishing point at the horizon
-        double roadBottom = h;            // road extends to the very bottom
+        double vanishY = h * SkyFraction;
+        double roadBottom = h;
+
+        double Zhorizon = Znear * DepthRatio;
+
+        // Back-compute Zpiano so the piano occupies exactly PianoScreenFraction of screen height.
+        // Screen Y at Zpiano = vanishY + roadHeight * (Znear / Zpiano)
+        // Piano screen height = roadBottom - screenY(Zpiano) = roadHeight * (1 - Znear / Zpiano)
+        // We want: roadHeight * (1 - Znear / Zpiano) = PianoScreenFraction * h
+        // => Znear / Zpiano = 1 - PianoScreenFraction / (1 - SkyFraction)
+        // => Zpiano = Znear / (1 - PianoScreenFraction / (1 - SkyFraction))
+        double roadFraction = 1.0 - SkyFraction;
+        double Zpiano = Znear / (1.0 - PianoScreenFraction / roadFraction);
+        Zpiano = Math.Clamp(Zpiano, Znear + 0.01, Zhorizon * 0.5); // safety clamp
 
         // 1. Background
         ctx.DrawRectangle(_backgroundBrush, null, new Rect(0, 0, w, h));
 
-        // 2. Perspective guide lines — one per note, from road bottom to the horizon line
+        // 2. Perspective guide lines — from piano (Znear) to horizon (Zhorizon)
+        //    Segmented with alpha fade to eliminate moiré where lines converge.
+        //    At each Z depth, compute the screen-space gap between adjacent white keys.
+        //    When the gap drops below ~2px, fade opacity to zero.
+        const int guideSegments = 40;
+        // GuideLineFade 0→1 maps to thresholds: min 0→6, max 0→16
+        double moireFadeMinGap = GuideLineFade * 6.0;
+        double moireFadeMaxGap = GuideLineFade * 16.0;
+        var guideLineColor = _guidePen.Brush is SolidColorBrush sb ? sb.Color : Colors.Gray;
+
         for (int note = 0; note < 128; note++)
         {
             double noteX = _layout.XCenter[note];
-            var (hx, hy) = Project(noteX, HorizonDepth, vanishX, vanishY, roadBottom);
-            ctx.DrawLine(_guidePen, new Point(noteX, roadBottom), new Point(hx, hy));
+            // Find a neighbor to measure screen-space gap
+            double neighborX = note < 127 ? _layout.XCenter[note + 1] : _layout.XCenter[note - 1];
+
+            Point? prevPoint = null;
+            for (int seg = 0; seg <= guideSegments; seg++)
+            {
+                double t = (double)seg / guideSegments;
+                double z = Znear + t * (Zhorizon - Znear);
+
+                var (sx, sy) = Project3D(noteX, z, vanishX, vanishY, roadBottom);
+                var (nx, _) = Project3D(neighborX, z, vanishX, vanishY, roadBottom);
+
+                double gap = Math.Abs(nx - sx);
+                double alpha = Math.Clamp((gap - moireFadeMinGap) / (moireFadeMaxGap - moireFadeMinGap), 0, 1);
+
+                var pt = new Point(sx, sy);
+                if (prevPoint.HasValue && alpha > 0.01)
+                {
+                    byte a = (byte)(alpha * guideLineColor.A);
+                    var fadedColor = Color.FromArgb(a, guideLineColor.R, guideLineColor.G, guideLineColor.B);
+                    var fadedPen = new Pen(new SolidColorBrush(fadedColor), _guidePen.Thickness);
+                    ctx.DrawLine(fadedPen, prevPoint.Value, pt);
+                }
+                prevPoint = pt;
+            }
         }
 
-        // 3. Notes on the road — collect visible, sort back-to-front
+        // 3. Notes on the road
         //
-        // Depth mapping: the "strike line" is at PianoDepthFraction (the far edge of the piano).
-        // A note hits the strike line exactly when StartSeconds == now, then continues
-        // through the piano area toward depth=0 as it sustains.
-        //   depth = PianoDepthFraction + (timeAhead / LookAheadSeconds) * (HorizonDepth - PianoDepthFraction)
-        // So: timeAhead=0 → depth=PianoDepthFraction (strike), timeAhead=LookAhead → depth=HorizonDepth (horizon)
+        // Time-to-Z mapping (linear in world space, constant velocity):
+        //   worldZ = Zpiano + (timeAhead / LookAheadSeconds) * (Zhorizon - Zpiano)
+        // At timeAhead=0: worldZ = Zpiano (note hits the strike line / far edge of piano)
+        // At timeAhead=LookAhead: worldZ = Zhorizon (note appears at the horizon)
+        // For sustaining notes (timeAhead < 0): worldZ < Zpiano (inside the piano area)
         double now = currentTimeSeconds;
-        double roadRange = HorizonDepth - PianoDepthFraction; // depth range from strike line to horizon
-        var visibleNotes = new List<(NoteEvent note, double depthNear, double depthFar)>();
+        double noteZrange = Zhorizon - Zpiano; // world Z range for the note runway
+
+        var visibleNotes = new List<(NoteEvent note, double zNear, double zFar)>();
         foreach (var note in notes)
         {
             if (note.StartSeconds - now > PianoLayout.LookAheadSeconds) break;
             if (note.EndSeconds < now - 0.5) continue;
 
-            // Apply power curve: t^PerspectivePower makes notes slow at horizon, fast near piano
-            double tNear = Math.Clamp((note.StartSeconds - now) / PianoLayout.LookAheadSeconds, 0, 1);
-            double tFar = Math.Clamp((note.EndSeconds - now) / PianoLayout.LookAheadSeconds, 0, 1);
-            double depthNear = PianoDepthFraction + Math.Pow(tNear, 1.0 / PerspectivePower) * roadRange;
-            double depthFar = PianoDepthFraction + Math.Pow(tFar, 1.0 / PerspectivePower) * roadRange;
+            double tNear = (note.StartSeconds - now) / PianoLayout.LookAheadSeconds;
+            double tFar = (note.EndSeconds - now) / PianoLayout.LookAheadSeconds;
 
-            // For notes currently playing (past the strike line), use linear depth into the piano
-            if (note.StartSeconds < now)
-                depthNear = PianoDepthFraction + (note.StartSeconds - now) / PianoLayout.LookAheadSeconds * roadRange;
-            if (note.EndSeconds < now)
-                depthFar = PianoDepthFraction + (note.EndSeconds - now) / PianoLayout.LookAheadSeconds * roadRange;
+            double zNear = Zpiano + tNear * noteZrange;
+            double zFar = Zpiano + tFar * noteZrange;
 
-            if (depthFar < 0) continue; // fully past the piano
-            visibleNotes.Add((note, depthNear, depthFar));
+            if (zFar < Znear * 0.5) continue; // fully past the piano
+            visibleNotes.Add((note, zNear, zFar));
         }
 
-        // Sort back-to-front (farthest near-edge first)
-        visibleNotes.Sort((a, b) => b.depthNear.CompareTo(a.depthNear));
+        // Sort back-to-front (farthest first)
+        visibleNotes.Sort((a, b) => b.zNear.CompareTo(a.zNear));
 
-        foreach (var (note, rawDepthNear, rawDepthFar) in visibleNotes)
+        foreach (var (note, rawZnear, rawZfar) in visibleNotes)
         {
-            // Clamp: notes appear at horizon, travel to piano, then through piano to depth=0
-            double dNear = Math.Clamp(rawDepthNear, 0, HorizonDepth);
-            double dFar = Math.Clamp(rawDepthFar, 0, HorizonDepth);
-            if (Math.Abs(dNear - dFar) < 0.001) dFar = Math.Min(dNear + 0.005, HorizonDepth);
+            // Clamp to visible range
+            double zN = Math.Clamp(rawZnear, Znear, Zhorizon);
+            double zF = Math.Clamp(rawZfar, Znear, Zhorizon);
+            if (Math.Abs(zN - zF) < 0.001) zF = Math.Min(zN + 0.01, Zhorizon);
 
             double noteX = _layout.XCenter[note.NoteNumber];
             double nw = _layout.NoteWidth[note.NoteNumber];
 
-            // Project near and far edges — these lie exactly on the guide line for noteX
-            var (cxNear, cyNear) = Project(noteX, dNear, vanishX, vanishY, roadBottom);
-            var (cxFar, cyFar) = Project(noteX, dFar, vanishX, vanishY, roadBottom);
+            // Project both edges — 1/z guarantees they lie on the guide line
+            var (cxNear, cyNear) = Project3D(noteX, zN, vanishX, vanishY, roadBottom);
+            var (cxFar, cyFar) = Project3D(noteX, zF, vanishX, vanishY, roadBottom);
 
-            double halfWNear = nw * WidthScale(dNear) / 2;
-            double halfWFar = nw * WidthScale(dFar) / 2;
+            double halfWNear = nw * WidthScale3D(zN) / 2;
+            double halfWFar = nw * WidthScale3D(zF) / 2;
 
             // Note color
             Color baseColor = ColorHelper.ResolveNoteColor(note, _colorMode, _channelColors, _trackColors, _noteColorOverrides);
@@ -176,14 +231,14 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
                 ? ColorHelper.LerpToColor(baseColor, theme.ActiveHighlightColor, theme.ActiveNoteBlend)
                 : baseColor;
 
-            // Alpha fade for distant notes (normalized to road range: strike line → horizon)
-            double fadeT = Math.Clamp((dNear - PianoDepthFraction) / roadRange, 0, 1);
+            // Alpha fade based on world distance (normalized 0–1 over the runway)
+            double fadeT = Math.Clamp((zN - Zpiano) / noteZrange, 0, 1);
             byte alpha = (byte)(255 * (1.0 - fadeT * 0.6));
             fillColor = Color.FromArgb(alpha, fillColor.R, fillColor.G, fillColor.B);
 
             var brush = new SolidColorBrush(fillColor);
 
-            // Draw trapezoid: near edge (bottom, wider) → far edge (top, narrower)
+            // Draw trapezoid
             var geo = new StreamGeometry();
             using (var sgCtx = geo.Open())
             {
@@ -196,8 +251,8 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
             ctx.DrawGeometry(brush, null, geo);
         }
 
-        // 4. Piano keys — perspective trapezoids lying flat on the road
-        DrawPerspectivePiano(ctx, theme, vanishX, vanishY, roadBottom, activeKeyChannel, activeKeyTrack);
+        // 4. Piano keys — perspective trapezoids
+        DrawPerspectivePiano(ctx, theme, vanishX, vanishY, roadBottom, Zpiano, activeKeyChannel, activeKeyTrack);
     }
 
     private void DrawPerspectivePiano(
@@ -206,35 +261,31 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         double vanishX,
         double vanishY,
         double roadBottom,
+        double Zpiano,
         int[] activeKeyChannel,
         int[] activeKeyTrack)
     {
-        // White keys span from the very bottom (dNear=0) to PianoDepthFraction.
-        // Black keys sit at the far end of white keys (further from viewer).
-        double whiteNear = 0;
-        double whiteFar = PianoDepthFraction;
-        double blackNear = PianoDepthFraction * 0.40; // start partway into the white key
-        double blackFar = PianoDepthFraction;          // end at the same far edge
+        // White keys: from Znear (bottom, closest) to Zpiano (far edge / strike line)
+        // Black keys: sit at the far portion of the white keys
+        double blackZnear = Znear + (Zpiano - Znear) * 0.40;
 
-        // White keys first (drawn underneath)
+        // White keys first
         for (int note = 0; note < 128; note++)
         {
             if (PianoLayout.IsBlackKey[note % 12]) continue;
-
             double noteX = _layout.XCenter[note];
             IBrush keyBrush = ResolveKeyBrush(note, false, theme, activeKeyChannel, activeKeyTrack);
-            DrawPerspectiveKey(ctx, noteX, _layout.WhiteKeyWidth, whiteNear, whiteFar,
+            DrawPerspectiveKey(ctx, noteX, _layout.NoteWidth[note], Znear, Zpiano,
                 vanishX, vanishY, roadBottom, keyBrush, _whiteKeyBorderPen);
         }
 
-        // Black keys on top — at the far portion of the piano (further from viewer)
+        // Black keys on top — at the far portion
         for (int note = 0; note < 128; note++)
         {
             if (!PianoLayout.IsBlackKey[note % 12]) continue;
-
             double noteX = _layout.XCenter[note];
             IBrush keyBrush = ResolveKeyBrush(note, true, theme, activeKeyChannel, activeKeyTrack);
-            DrawPerspectiveKey(ctx, noteX, _layout.BlackKeyWidth, blackNear, blackFar,
+            DrawPerspectiveKey(ctx, noteX, _layout.NoteWidth[note], blackZnear, Zpiano,
                 vanishX, vanishY, roadBottom, keyBrush, null);
         }
     }
@@ -243,19 +294,19 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         DrawingContext ctx,
         double noteX,
         double keyWidth,
-        double dNear,
-        double dFar,
+        double zNear,
+        double zFar,
         double vanishX,
         double vanishY,
         double roadBottom,
         IBrush brush,
         IPen? pen)
     {
-        var (cxNear, cyNear) = Project(noteX, dNear, vanishX, vanishY, roadBottom);
-        var (cxFar, cyFar) = Project(noteX, dFar, vanishX, vanishY, roadBottom);
+        var (cxNear, cyNear) = Project3D(noteX, zNear, vanishX, vanishY, roadBottom);
+        var (cxFar, cyFar) = Project3D(noteX, zFar, vanishX, vanishY, roadBottom);
 
-        double halfWNear = keyWidth * WidthScale(dNear) / 2;
-        double halfWFar = keyWidth * WidthScale(dFar) / 2;
+        double halfWNear = keyWidth * WidthScale3D(zNear) / 2;
+        double halfWFar = keyWidth * WidthScale3D(zFar) / 2;
 
         var geo = new StreamGeometry();
         using (var sgCtx = geo.Open())

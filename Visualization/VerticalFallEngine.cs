@@ -121,7 +121,12 @@ public sealed class VerticalFallEngine : IVisualizationEngine
         int[] activeKeyChannel,
         int[] activeKeyTrack)
     {
-        // White keys first
+        double sw = _layout.SlotWidth;
+        double gap = Math.Max(sw * 0.06, 0.5); // thin gap between keys
+        double blackKeyH = pianoHeight * PianoLayout.BlackKeyHeightFraction;
+        double dividerY = pianoY + blackKeyH; // Y where top (narrow) meets bottom (wide)
+
+        // White keys — shaped polygons: narrow at top, wide at bottom
         for (int note = 0; note < 128; note++)
         {
             if (PianoLayout.IsBlackKey[note % 12]) continue;
@@ -144,12 +149,30 @@ public sealed class VerticalFallEngine : IVisualizationEngine
                 keyBrush = _whiteKeyBrush;
             }
 
-            double x = _layout.XCenter[note] - _layout.WhiteKeyWidth / 2;
-            var keyRect = new Rect(x, pianoY, _layout.WhiteKeyWidth - 1, pianoHeight);
-            ctx.DrawRectangle(keyBrush, _whiteKeyBorderPen, keyRect, 0, 3);
+            double topLeft = _layout.KeyTopLeft[note] + gap / 2;
+            double topRight = _layout.KeyTopRight[note] - gap / 2;
+            double botLeft = _layout.WhiteKeyBottomLeft[note] + gap / 2;
+            double botRight = _layout.WhiteKeyBottomRight[note] - gap / 2;
+            double botY = pianoY + pianoHeight;
+
+            var geo = new StreamGeometry();
+            using (var sgCtx = geo.Open())
+            {
+                // Start top-left, go clockwise
+                sgCtx.BeginFigure(new Point(topLeft, pianoY), true);
+                sgCtx.LineTo(new Point(topRight, pianoY));
+                sgCtx.LineTo(new Point(topRight, dividerY));
+                sgCtx.LineTo(new Point(botRight, dividerY));
+                sgCtx.LineTo(new Point(botRight, botY));
+                sgCtx.LineTo(new Point(botLeft, botY));
+                sgCtx.LineTo(new Point(botLeft, dividerY));
+                sgCtx.LineTo(new Point(topLeft, dividerY));
+                sgCtx.EndFigure(true);
+            }
+            ctx.DrawGeometry(keyBrush, _whiteKeyBorderPen, geo);
         }
 
-        // Black keys on top
+        // Black keys on top (shorter)
         for (int note = 0; note < 128; note++)
         {
             if (!PianoLayout.IsBlackKey[note % 12]) continue;
@@ -172,9 +195,9 @@ public sealed class VerticalFallEngine : IVisualizationEngine
                 keyBrush = _blackKeyBrush;
             }
 
-            double x = _layout.XCenter[note] - _layout.BlackKeyWidth / 2;
-            double bh = pianoHeight * 0.65;
-            var keyRect = new Rect(x, pianoY, _layout.BlackKeyWidth, bh);
+            double x = _layout.KeyTopLeft[note] + gap / 2;
+            double keyW = _layout.KeyTopRight[note] - _layout.KeyTopLeft[note] - gap;
+            var keyRect = new Rect(x, pianoY, keyW, blackKeyH);
             ctx.DrawRectangle(keyBrush, null, keyRect, 0, 2);
         }
     }

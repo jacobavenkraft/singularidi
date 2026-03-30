@@ -35,6 +35,10 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
     /// <summary>Fraction of the road that the piano keys occupy at the bottom. Default 0.10.</summary>
     public double PianoDepthFraction { get; set; } = 0.10;
 
+    /// <summary>Power curve exponent for perspective acceleration. Values &gt; 1 make notes
+    /// crawl slowly at the horizon and accelerate toward the viewer. Default 2.0.</summary>
+    public double PerspectivePower { get; set; } = 2.0;
+
     // ── Derived layout values (recalculated per frame from the configurables) ──
     // vanishX, vanishY = the perspective vanishing point
     // roadBottom = Y coordinate of the bottom of the road (top of screen = 0)
@@ -125,8 +129,17 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
             if (note.StartSeconds - now > PianoLayout.LookAheadSeconds) break;
             if (note.EndSeconds < now - 0.5) continue;
 
-            double depthNear = PianoDepthFraction + (note.StartSeconds - now) / PianoLayout.LookAheadSeconds * roadRange;
-            double depthFar = PianoDepthFraction + (note.EndSeconds - now) / PianoLayout.LookAheadSeconds * roadRange;
+            // Apply power curve: t^PerspectivePower makes notes slow at horizon, fast near piano
+            double tNear = Math.Clamp((note.StartSeconds - now) / PianoLayout.LookAheadSeconds, 0, 1);
+            double tFar = Math.Clamp((note.EndSeconds - now) / PianoLayout.LookAheadSeconds, 0, 1);
+            double depthNear = PianoDepthFraction + Math.Pow(tNear, 1.0 / PerspectivePower) * roadRange;
+            double depthFar = PianoDepthFraction + Math.Pow(tFar, 1.0 / PerspectivePower) * roadRange;
+
+            // For notes currently playing (past the strike line), use linear depth into the piano
+            if (note.StartSeconds < now)
+                depthNear = PianoDepthFraction + (note.StartSeconds - now) / PianoLayout.LookAheadSeconds * roadRange;
+            if (note.EndSeconds < now)
+                depthFar = PianoDepthFraction + (note.EndSeconds - now) / PianoLayout.LookAheadSeconds * roadRange;
 
             if (depthFar < 0) continue; // fully past the piano
             visibleNotes.Add((note, depthNear, depthFar));

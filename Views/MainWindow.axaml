@@ -35,6 +35,7 @@
                   ToggleType="CheckBox" IsChecked="{Binding HighlightActiveNotes}"/>
         <Separator/>
         <MenuItem Header="Visualization" Classes="dynamic" ItemsSource="{Binding VisualizationMenuItems}"/>
+        <MenuItem Header="Guide Lines" Classes="dynamic" ItemsSource="{Binding GuideLineStyleMenuItems}"/>
         <Separator/>
         <MenuItem Header="Theme" Classes="dynamic" ItemsSource="{Binding ThemeMenuItems}"/>
       </MenuItem>

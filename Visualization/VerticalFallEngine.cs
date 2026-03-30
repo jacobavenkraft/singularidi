@@ -9,6 +9,8 @@ public sealed class VerticalFallEngine : IVisualizationEngine
 {
     public string Name => "Vertical Fall";
 
+    public GuideLineStyle GuideLineStyle { get; set; } = GuideLineStyle.KeyWidthCentered;
+
     private readonly PianoLayout _layout = new();
 
     // Cached brushes/pens rebuilt when theme changes
@@ -68,11 +70,32 @@ public sealed class VerticalFallEngine : IVisualizationEngine
         ctx.DrawRectangle(_backgroundBrush, null, new Rect(0, 0, w, h));
 
         // 2. Note lane guides
-        for (int note = 0; note < 128; note++)
+        switch (GuideLineStyle)
         {
-            ctx.DrawLine(_guidePen,
-                new Point(_layout.XCenter[note], 0),
-                new Point(_layout.XCenter[note], vizHeight));
+            case GuideLineStyle.KeyWidthCentered:
+                for (int note = 0; note < 128; note++)
+                {
+                    ctx.DrawLine(_guidePen,
+                        new Point(_layout.XCenter[note], 0),
+                        new Point(_layout.XCenter[note], vizHeight));
+                }
+                break;
+
+            case GuideLineStyle.UniformCentered:
+                for (int note = 0; note < 128; note++)
+                {
+                    ctx.DrawLine(_guidePen,
+                        new Point(_layout.GuideXUniform[note], 0),
+                        new Point(_layout.GuideXUniform[note], vizHeight));
+                }
+                break;
+
+            case GuideLineStyle.Octave:
+                foreach (double x in _layout.OctaveBoundaryX)
+                {
+                    ctx.DrawLine(_guidePen, new Point(x, 0), new Point(x, vizHeight));
+                }
+                break;
         }
 
         // 3. Falling notes

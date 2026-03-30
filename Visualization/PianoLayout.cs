@@ -33,6 +33,11 @@ public sealed class PianoLayout
     /// <summary>Right edge of each key's top section. -1 if unused.</summary>
     public readonly double[] KeyTopRight = new double[128];
 
+    /// <summary>Center of the narrow top portion for each key — used for UniformCentered guide lines.</summary>
+    public readonly double[] GuideXUniform = new double[128];
+    /// <summary>X positions of octave boundaries (between B and C). Used for Octave guide lines.</summary>
+    public readonly List<double> OctaveBoundaryX = new();
+
     /// <summary>Width of the wide bottom portion of white keys (width / 75).</summary>
     public double WhiteKeyWidth { get; private set; }
     /// <summary>Black key width in the CDE group (3*WKW/5).</summary>
@@ -158,6 +163,25 @@ public sealed class PianoLayout
             bool hasBlackRight = note < 127 && IsBlackKey[(note + 1) % 12];
             if (!hasBlackRight)
                 KeyTopRight[note] = WhiteKeyBottomRight[note];
+        }
+
+        // Fourth pass: compute uniform guide line positions (center of top portion)
+        for (int note = 0; note < 128; note++)
+        {
+            if (KeyTopLeft[note] >= 0 && KeyTopRight[note] >= 0)
+                GuideXUniform[note] = (KeyTopLeft[note] + KeyTopRight[note]) / 2.0;
+            else
+                GuideXUniform[note] = XCenter[note]; // fallback
+        }
+
+        // Fifth pass: compute octave boundary positions (between B and C)
+        OctaveBoundaryX.Clear();
+        for (int note = 0; note < 128; note++)
+        {
+            if (note % 12 != 0 || note == 0) continue; // C notes, skip the first one
+            // Boundary is at C's bottom left edge
+            if (WhiteKeyBottomLeft[note] >= 0)
+                OctaveBoundaryX.Add(WhiteKeyBottomLeft[note]);
         }
     }
 

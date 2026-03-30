@@ -66,6 +66,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ObservableCollection<MenuItemViewModel> ThemeMenuItems { get; } = new();
     public ObservableCollection<MenuItemViewModel> MidiDeviceMenuItems { get; } = new();
     public ObservableCollection<MenuItemViewModel> VisualizationMenuItems { get; } = new();
+    public ObservableCollection<MenuItemViewModel> GuideLineStyleMenuItems { get; } = new();
 
     // ── Constructor ────────────────────────────────────────────────────────
 
@@ -90,12 +91,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         RefreshMidiDeviceMenuItems();
         RefreshThemeMenuItems();
         RefreshVisualizationMenuItems();
+        RefreshGuideLineStyleMenuItems();
         RebuildAudioEngine();
 
         // Restore last-used visualization
         var savedViz = _availableVisualizations.FirstOrDefault(v => v.Name == config.VisualizationType);
         if (savedViz != null)
             CurrentVisualization = savedViz;
+
+        // Restore last-used guide line style
+        if (!string.IsNullOrEmpty(config.GuideLineStyle) &&
+            Enum.TryParse<GuideLineStyle>(config.GuideLineStyle, out var savedStyle))
+            ApplyGuideLineStyle(savedStyle);
 
         if (string.IsNullOrEmpty(config.SoundFontPath) && config.OutputMode == AudioOutputMode.SoundFont)
             StatusText = "No SoundFont configured — use Audio menu to select one";
@@ -356,6 +363,26 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    [RelayCommand]
+    private void SetGuideLineStyle(string styleName)
+    {
+        if (Enum.TryParse<GuideLineStyle>(styleName, out var style))
+        {
+            ApplyGuideLineStyle(style);
+            _config.GuideLineStyle = styleName;
+            _configService.Save(_config);
+        }
+    }
+
+    private void ApplyGuideLineStyle(GuideLineStyle style)
+    {
+        foreach (var viz in _availableVisualizations)
+        {
+            if (viz is VerticalFallEngine vfe) vfe.GuideLineStyle = style;
+            else if (viz is HorizontalCrawlEngine hce) hce.GuideLineStyle = style;
+        }
+    }
+
     public void RegisterVisualization(IVisualizationEngine engine)
     {
         if (_availableVisualizations.All(v => v.Name != engine.Name))
@@ -385,6 +412,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             var vizName = viz.Name; // capture
             VisualizationMenuItems.Add(new MenuItemViewModel(vizName, new RelayCommand(() => SetVisualization(vizName))));
+        }
+    }
+
+    private void RefreshGuideLineStyleMenuItems()
+    {
+        GuideLineStyleMenuItems.Clear();
+        foreach (var style in Enum.GetValues<GuideLineStyle>())
+        {
+            var name = style.ToString();
+            // Add spaces before capitals for display: "KeyWidthCentered" → "Key Width Centered"
+            var display = System.Text.RegularExpressions.Regex.Replace(name, "(?<!^)([A-Z])", " $1");
+            GuideLineStyleMenuItems.Add(new MenuItemViewModel(display, new RelayCommand(() => SetGuideLineStyle(name))));
         }
     }
 

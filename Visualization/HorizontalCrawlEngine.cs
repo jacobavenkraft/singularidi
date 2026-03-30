@@ -19,6 +19,8 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
 {
     public string Name => "Horizontal Crawl";
 
+    public GuideLineStyle GuideLineStyle { get; set; } = GuideLineStyle.KeyWidthCentered;
+
     private readonly PianoLayout _layout = new();
 
     private IBrush _backgroundBrush = null!;
@@ -134,45 +136,8 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         // 1. Background
         ctx.DrawRectangle(_backgroundBrush, null, new Rect(0, 0, w, h));
 
-        // 2. Perspective guide lines — from piano (Znear) to horizon (Zhorizon)
-        //    Segmented with alpha fade to eliminate moiré where lines converge.
-        //    At each Z depth, compute the screen-space gap between adjacent white keys.
-        //    When the gap drops below ~2px, fade opacity to zero.
-        const int guideSegments = 40;
-        // GuideLineFade 0→1 maps to thresholds: min 0→6, max 0→16
-        double moireFadeMinGap = GuideLineFade * 6.0;
-        double moireFadeMaxGap = GuideLineFade * 16.0;
-        var guideLineColor = _guidePen.Brush is SolidColorBrush sb ? sb.Color : Colors.Gray;
-
-        for (int note = 0; note < 128; note++)
-        {
-            double noteX = _layout.XCenter[note];
-            // Find a neighbor to measure screen-space gap
-            double neighborX = note < 127 ? _layout.XCenter[note + 1] : _layout.XCenter[note - 1];
-
-            Point? prevPoint = null;
-            for (int seg = 0; seg <= guideSegments; seg++)
-            {
-                double t = (double)seg / guideSegments;
-                double z = Znear + t * (Zhorizon - Znear);
-
-                var (sx, sy) = Project3D(noteX, z, vanishX, vanishY, roadBottom);
-                var (nx, _) = Project3D(neighborX, z, vanishX, vanishY, roadBottom);
-
-                double gap = Math.Abs(nx - sx);
-                double alpha = Math.Clamp((gap - moireFadeMinGap) / (moireFadeMaxGap - moireFadeMinGap), 0, 1);
-
-                var pt = new Point(sx, sy);
-                if (prevPoint.HasValue && alpha > 0.01)
-                {
-                    byte a = (byte)(alpha * guideLineColor.A);
-                    var fadedColor = Color.FromArgb(a, guideLineColor.R, guideLineColor.G, guideLineColor.B);
-                    var fadedPen = new Pen(new SolidColorBrush(fadedColor), _guidePen.Thickness);
-                    ctx.DrawLine(fadedPen, prevPoint.Value, pt);
-                }
-                prevPoint = pt;
-            }
-        }
+        // 2. Perspective guide lines
+        DrawPerspectiveGuideLines(ctx, vanishX, vanishY, roadBottom, Znear, Zhorizon);
 
         // 3. Notes on the road
         //
@@ -318,6 +283,95 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
             sgCtx.EndFigure(true);
         }
         ctx.DrawGeometry(brush, pen, geo);
+    }
+
+    private void DrawPerspectiveGuideLines(
+        DrawingContext ctx,
+        double vanishX, double vanishY, double roadBottom,
+        double Znear, double Zhorizon)
+    {
+        const int guideSegments = 40;
+        double moireFadeMinGap = GuideLineFade * 6.0;
+        double moireFadeMaxGap = GuideLineFade * 16.0;
+        var guideLineColor = _guidePen.Brush is SolidColorBrush sb ? sb.Color : Colors.Gray;
+
+        // Collect the X positions to draw guide lines at
+        var guidePositions = new List<(double x, double neighborX)>();
+
+        switch (GuideLineStyle)
+        {
+            case GuideLineStyle.KeyWidthCentered:
+                for (int note = 0; note < 128; note++)
+                {
+                    double nx = _layout.XCenter[note];
+                    double neighbor = note < 127 ? _layout.XCenter[note + 1] : _layout.XCenter[note - 1];
+                    guidePositions.Add((nx, neighbor));
+                }
+                break;
+
+            case GuideLineStyle.UniformCentered:
+                for (int note = 0; note < 128; note++)
+                {
+                    double nx = _layout.GuideXUniform[note];
+                    double neighbor = note < 127 ? _layout.GuideXUniform[note + 1] : _layout.GuideXUniform[note - 1];
+                    guidePositions.Add((nx, neighbor));
+                }
+                break;
+
+            case GuideLineStyle.Octave:
+            {
+                // Left edge of keyboard
+                double leftEdge = _layout.WhiteKeyBottomLeft[0] >= 0 ? _layout.WhiteKeyBottomLeft[0] : 0;
+                // Right edge of keyboard — find last white key
+                double rightEdge = leftEdge;
+                for (int n = 127; n >= 0; n--)
+                {
+                    if (_layout.WhiteKeyBottomRight[n] >= 0) { rightEdge = _layout.WhiteKeyBottomRight[n]; break; }
+                }
+
+                var allPositions = new List<double> { leftEdge };
+                allPositions.AddRange(_layout.OctaveBoundaryX);
+                allPositions.Add(rightEdge);
+
+                for (int i = 0; i < allPositions.Count; i++)
+                {
+                    double neighbor = i < allPositions.Count - 1
+                        ? allPositions[i + 1]
+                        : allPositions[i - 1];
+                    guidePositions.Add((allPositions[i], neighbor));
+                }
+                break;
+            }
+        }
+
+        // Draw each guide line with perspective moiré fade
+        foreach (var (guideX, neighborX) in guidePositions)
+        {
+            Point? prevPoint = null;
+            for (int seg = 0; seg <= guideSegments; seg++)
+            {
+                double t = (double)seg / guideSegments;
+                double z = Znear + t * (Zhorizon - Znear);
+
+                var (sx, sy) = Project3D(guideX, z, vanishX, vanishY, roadBottom);
+                var (nsx, _) = Project3D(neighborX, z, vanishX, vanishY, roadBottom);
+
+                double gap = Math.Abs(nsx - sx);
+                double alpha = moireFadeMaxGap > 0
+                    ? Math.Clamp((gap - moireFadeMinGap) / (moireFadeMaxGap - moireFadeMinGap), 0, 1)
+                    : 1.0;
+
+                var pt = new Point(sx, sy);
+                if (prevPoint.HasValue && alpha > 0.01)
+                {
+                    byte a = (byte)(alpha * guideLineColor.A);
+                    var fadedColor = Color.FromArgb(a, guideLineColor.R, guideLineColor.G, guideLineColor.B);
+                    var fadedPen = new Pen(new SolidColorBrush(fadedColor), _guidePen.Thickness);
+                    ctx.DrawLine(fadedPen, prevPoint.Value, pt);
+                }
+                prevPoint = pt;
+            }
+        }
     }
 
     private IBrush ResolveKeyBrush(

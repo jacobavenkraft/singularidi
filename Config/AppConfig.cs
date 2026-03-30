@@ -11,6 +11,7 @@ public class AppConfig
     public string LastMidiFilePath { get; set; } = "";
     public string ThemeName { get; set; } = "Dark";
     public string VisualizationType { get; set; } = "Vertical Fall";
+    public string GuideLineStyle { get; set; } = "KeyWidthCentered";
     public List<ThemeData>? CustomThemes { get; set; }
 
     // Export settings

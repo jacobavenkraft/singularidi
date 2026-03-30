@@ -12,6 +12,13 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = vm;
         vm.ExitRequested += Close;
+        vm.ShowExportProgress += OnShowExportProgress;
+    }
+
+    private async Task OnShowExportProgress(ExportProgressViewModel progressVm)
+    {
+        var window = new ExportProgressWindow { DataContext = progressVm };
+        await window.ShowDialog(this);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -19,6 +26,7 @@ public partial class MainWindow : Window
         if (DataContext is MainWindowViewModel vm)
         {
             vm.ExitRequested -= Close;
+            vm.ShowExportProgress -= OnShowExportProgress;
             vm.Dispose();
         }
         base.OnClosed(e);

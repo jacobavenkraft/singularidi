@@ -26,11 +26,15 @@
       <MenuItem Header="_File">
         <MenuItem Header="Open MIDI File…" Command="{Binding OpenMidiFileCommand}" InputGesture="Ctrl+O"/>
         <Separator/>
+        <MenuItem Header="Export to MP4…" Command="{Binding ExportToMp4Command}"/>
+        <Separator/>
         <MenuItem Header="E_xit" Command="{Binding ExitCommand}"/>
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="Highlight Active Notes"
                   ToggleType="CheckBox" IsChecked="{Binding HighlightActiveNotes}"/>
+        <Separator/>
+        <MenuItem Header="Visualization" Classes="dynamic" ItemsSource="{Binding VisualizationMenuItems}"/>
         <Separator/>
         <MenuItem Header="Theme" Classes="dynamic" ItemsSource="{Binding ThemeMenuItems}"/>
       </MenuItem>
@@ -65,7 +69,8 @@
     <controls:NoteVisualizerControl
         VisualTheme="{Binding CurrentTheme}"
         HighlightActiveNotes="{Binding HighlightActiveNotes}"
-        Engine="{Binding Engine}"/>
+        Engine="{Binding Engine}"
+        VisualizationEngine="{Binding CurrentVisualization}"/>
 
   </DockPanel>
 </Window>

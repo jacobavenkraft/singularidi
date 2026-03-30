@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Singularidi.ViewModels"
+        x:Class="Singularidi.Views.ExportProgressWindow"
+        x:DataType="vm:ExportProgressViewModel"
+        Title="Export to MP4"
+        Width="450" Height="180"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <StackPanel Margin="20" Spacing="12">
+    <TextBlock Text="{Binding StatusText}" FontSize="14"/>
+    <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" Height="20"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Command="{Binding CancelCommand}"
+              IsVisible="{Binding !IsComplete}" Padding="16,6"/>
+      <Button Content="Close" IsVisible="{Binding IsComplete}" Padding="16,6"
+              Click="OnCloseClick"/>
+    </StackPanel>
+  </StackPanel>
+</Window>

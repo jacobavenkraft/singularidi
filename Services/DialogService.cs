@@ -55,4 +55,19 @@ public sealed class DialogService : IDialogService
         editor.DataContext = vm;
         return await editor.ShowDialog<ThemeData?>(window);
     }
+
+    public async Task<string?> SaveMp4FileAsync()
+    {
+        var window = _getWindow();
+        var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export to MP4",
+            DefaultExtension = "mp4",
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("MP4 Video") { Patterns = new[] { "*.mp4" } },
+            }
+        });
+        return file?.Path.LocalPath;
+    }
 }

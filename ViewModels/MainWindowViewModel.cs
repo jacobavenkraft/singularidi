@@ -3,9 +3,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Singularidi.Audio;
 using Singularidi.Config;
+using Singularidi.Export;
 using Singularidi.Midi;
 using Singularidi.Services;
 using Singularidi.Themes;
+using Singularidi.Visualization;
 
 namespace Singularidi.ViewModels;
 
@@ -49,10 +51,21 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private IVisualTheme _currentTheme = BuiltInThemes.Dark();
 
+    [ObservableProperty]
+    private IVisualizationEngine _currentVisualization = new VerticalFallEngine();
+
     public MidiPlaybackEngine Engine => _engine;
+
+    private readonly List<IVisualizationEngine> _availableVisualizations =
+    [
+        new VerticalFallEngine(),
+        new HorizontalCrawlEngine(),
+        new ConicalCrawlEngine(),
+    ];
 
     public ObservableCollection<MenuItemViewModel> ThemeMenuItems { get; } = new();
     public ObservableCollection<MenuItemViewModel> MidiDeviceMenuItems { get; } = new();
+    public ObservableCollection<MenuItemViewModel> VisualizationMenuItems { get; } = new();
 
     // ── Constructor ────────────────────────────────────────────────────────
 
@@ -76,7 +89,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         RefreshMidiDeviceMenuItems();
         RefreshThemeMenuItems();
+        RefreshVisualizationMenuItems();
         RebuildAudioEngine();
+
+        // Restore last-used visualization
+        var savedViz = _availableVisualizations.FirstOrDefault(v => v.Name == config.VisualizationType);
+        if (savedViz != null)
+            CurrentVisualization = savedViz;
 
         if (string.IsNullOrEmpty(config.SoundFontPath) && config.OutputMode == AudioOutputMode.SoundFont)
             StatusText = "No SoundFont configured — use Audio menu to select one";
@@ -129,6 +148,75 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public event Action? ExitRequested;
+
+    // Expose for export progress dialog ownership
+    public event Func<ExportProgressViewModel, Task>? ShowExportProgress;
+
+    [RelayCommand]
+    private async Task ExportToMp4Async()
+    {
+        if (string.IsNullOrEmpty(_config.LastMidiFilePath) || !File.Exists(_config.LastMidiFilePath))
+        {
+            StatusText = "No MIDI file loaded — open a file first.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(_config.SoundFontPath) || !File.Exists(_config.SoundFontPath))
+        {
+            StatusText = "No SoundFont configured — select one in Audio menu first.";
+            return;
+        }
+
+        if (!Mp4Exporter.IsFfmpegAvailable(_config.FfmpegPath))
+        {
+            StatusText = "FFmpeg not found — install FFmpeg and ensure it is in PATH.";
+            return;
+        }
+
+        var outputPath = await _dialogService.SaveMp4FileAsync();
+        if (outputPath == null) return;
+
+        var progressVm = new ExportProgressViewModel();
+        var exportSettings = new ExportSettings(
+            _config.ExportWidth, _config.ExportHeight, _config.ExportFps, _config.FfmpegPath);
+
+        // Show progress window (the view handles this via event)
+        _ = ShowExportProgress?.Invoke(progressVm);
+
+        try
+        {
+            var exporter = new Mp4Exporter();
+            var progressReporter = new Progress<(double progress, string status)>(
+                update => progressVm.Update(update.progress, update.status));
+
+            await exporter.ExportAsync(
+                _config.LastMidiFilePath,
+                _config.SoundFontPath,
+                outputPath,
+                exportSettings,
+                CurrentVisualization,
+                _engine.Notes,
+                _engine.TotalDurationSeconds,
+                CurrentTheme,
+                HighlightActiveNotes,
+                progressReporter,
+                progressVm.Cts.Token);
+
+            progressVm.Complete($"Export complete: {Path.GetFileName(outputPath)}");
+            StatusText = $"Exported: {Path.GetFileName(outputPath)}";
+        }
+        catch (OperationCanceledException)
+        {
+            progressVm.Complete("Export cancelled.");
+            StatusText = "Export cancelled.";
+            try { File.Delete(outputPath); } catch { }
+        }
+        catch (Exception ex)
+        {
+            progressVm.Complete($"Export failed: {ex.Message}");
+            StatusText = $"Export failed: {ex.Message}";
+        }
+    }
 
     // ── Playback commands ──────────────────────────────────────────────────
 
@@ -254,6 +342,29 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ApplyTheme(theme.Name);
     }
 
+    // ── Visualization commands ──────────────────────────────────────────────
+
+    [RelayCommand]
+    private void SetVisualization(string name)
+    {
+        var viz = _availableVisualizations.FirstOrDefault(v => v.Name == name);
+        if (viz != null)
+        {
+            CurrentVisualization = viz;
+            _config.VisualizationType = name;
+            _configService.Save(_config);
+        }
+    }
+
+    public void RegisterVisualization(IVisualizationEngine engine)
+    {
+        if (_availableVisualizations.All(v => v.Name != engine.Name))
+        {
+            _availableVisualizations.Add(engine);
+            RefreshVisualizationMenuItems();
+        }
+    }
+
     // ── Dynamic menu builders ──────────────────────────────────────────────
 
     private void RefreshThemeMenuItems()
@@ -265,6 +376,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             ThemeMenuItems.Add(new MenuItemViewModel(themeName, new RelayCommand(() => ApplyTheme(themeName))));
         }
         ThemeMenuItems.Add(new MenuItemViewModel("Create Custom Theme…", CreateCustomThemeCommand));
+    }
+
+    private void RefreshVisualizationMenuItems()
+    {
+        VisualizationMenuItems.Clear();
+        foreach (var viz in _availableVisualizations)
+        {
+            var vizName = viz.Name; // capture
+            VisualizationMenuItems.Add(new MenuItemViewModel(vizName, new RelayCommand(() => SetVisualization(vizName))));
+        }
     }
 
     private void RefreshMidiDeviceMenuItems()

@@ -27,6 +27,13 @@ public sealed class VerticalFallEngine : IVisualizationEngine
     private Dictionary<int, Color>? _keyColorOverrides;
     private IVisualTheme? _cachedTheme;
 
+    // 3D piano key cached brushes
+    private LinearGradientBrush _whiteKeyGradient = null!;
+    private LinearGradientBrush _blackKeyGradient = null!;
+    private SolidColorBrush _whiteKeyFrontBrush = null!;
+    private LinearGradientBrush _blackKeyShadowLBrush = null!;  // shadow on left side
+    private LinearGradientBrush _blackKeyShadowRBrush = null!;  // shadow on right side
+
     public void OnSizeChanged(double width, double height)
     {
         _layout.RebuildIfNeeded(width);
@@ -47,6 +54,31 @@ public sealed class VerticalFallEngine : IVisualizationEngine
         _trackColors = theme.TrackColors;
         _noteColorOverrides = theme.NoteColorOverrides;
         _keyColorOverrides = theme.KeyColorOverrides;
+
+        // 3D piano key brushes
+        _whiteKeyGradient = MakeWhiteKeyGradient(theme.WhiteKeyColor);
+        _blackKeyGradient = MakeBlackKeyGradient(theme.BlackKeyColor);
+        _whiteKeyFrontBrush = new SolidColorBrush(ColorHelper.Darken(theme.WhiteKeyColor, 0.25));
+        _blackKeyShadowLBrush = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Color.FromArgb(45, 0, 0, 0), 0.0),
+                new GradientStop(Color.FromArgb(0, 0, 0, 0), 1.0),
+            }
+        };
+        _blackKeyShadowRBrush = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(Color.FromArgb(0, 0, 0, 0), 0.0),
+                new GradientStop(Color.FromArgb(45, 0, 0, 0), 1.0),
+            }
+        };
     }
 
     public void Render(
@@ -147,31 +179,35 @@ public sealed class VerticalFallEngine : IVisualizationEngine
         int[] activeKeyTrack)
     {
         double sw = _layout.SlotWidth;
-        double gap = Math.Max(sw * 0.06, 0.5); // thin gap between keys
+        double gap = Math.Max(sw * 0.06, 0.5);
         double blackKeyH = pianoHeight * PianoLayout.BlackKeyHeightFraction;
-        double dividerY = pianoY + blackKeyH; // Y where top (narrow) meets bottom (wide)
+        double dividerY = pianoY + blackKeyH;
+        double pressDepth = pianoHeight * 0.02;
+        double thicknessH = pianoHeight * 0.025;
 
-        // White keys — shaped polygons: narrow at top, wide at bottom
+        // === White keys — shaped polygons with gradient fill ===
         for (int note = 0; note < 128; note++)
         {
             if (PianoLayout.IsBlackKey[note % 12]) continue;
             int channel = activeKeyChannel[note];
+            bool isActive = channel >= 0;
+
             IBrush keyBrush;
-            if (channel >= 0)
+            if (isActive)
             {
                 var activeColor = ColorHelper.ResolveActiveKeyColor(
                     note, activeKeyChannel, activeKeyTrack,
                     _colorMode, _channelColors, _trackColors,
                     theme.ActiveHighlightColor, theme.ActiveWhiteKeyBlend);
-                keyBrush = new SolidColorBrush(activeColor);
+                keyBrush = MakeWhiteKeyGradient(activeColor);
             }
             else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))
             {
-                keyBrush = new SolidColorBrush(keyOverride);
+                keyBrush = MakeWhiteKeyGradient(keyOverride);
             }
             else
             {
-                keyBrush = _whiteKeyBrush;
+                keyBrush = _whiteKeyGradient;
             }
 
             double topLeft = _layout.KeyTopLeft[note] + gap / 2;
@@ -180,50 +216,124 @@ public sealed class VerticalFallEngine : IVisualizationEngine
             double botRight = _layout.WhiteKeyBottomRight[note] - gap / 2;
             double botY = pianoY + pianoHeight;
 
+            // Depression: shift top edge down for active keys
+            double keyTopY = isActive ? pianoY + pressDepth : pianoY;
+            double keyDivY = isActive ? dividerY + pressDepth * 0.5 : dividerY;
+
             var geo = new StreamGeometry();
             using (var sgCtx = geo.Open())
             {
-                // Start top-left, go clockwise
-                sgCtx.BeginFigure(new Point(topLeft, pianoY), true);
-                sgCtx.LineTo(new Point(topRight, pianoY));
-                sgCtx.LineTo(new Point(topRight, dividerY));
-                sgCtx.LineTo(new Point(botRight, dividerY));
+                sgCtx.BeginFigure(new Point(topLeft, keyTopY), true);
+                sgCtx.LineTo(new Point(topRight, keyTopY));
+                sgCtx.LineTo(new Point(topRight, keyDivY));
+                sgCtx.LineTo(new Point(botRight, keyDivY));
                 sgCtx.LineTo(new Point(botRight, botY));
                 sgCtx.LineTo(new Point(botLeft, botY));
-                sgCtx.LineTo(new Point(botLeft, dividerY));
-                sgCtx.LineTo(new Point(topLeft, dividerY));
+                sgCtx.LineTo(new Point(botLeft, keyDivY));
+                sgCtx.LineTo(new Point(topLeft, keyDivY));
                 sgCtx.EndFigure(true);
             }
             ctx.DrawGeometry(keyBrush, _whiteKeyBorderPen, geo);
+
+            // Front face strip at bottom
+            double frontH = isActive ? thicknessH * 0.6 : thicknessH;
+            var frontBrush = isActive
+                ? new SolidColorBrush(ColorHelper.Darken(
+                    ColorHelper.ResolveActiveKeyColor(note, activeKeyChannel, activeKeyTrack,
+                        _colorMode, _channelColors, _trackColors,
+                        theme.ActiveHighlightColor, theme.ActiveWhiteKeyBlend), 0.25))
+                : _whiteKeyFrontBrush;
+            ctx.DrawRectangle(frontBrush, null,
+                new Rect(botLeft, botY, botRight - botLeft, frontH));
         }
 
-        // Black keys on top (shorter)
+        // === Shadow overlays from black keys onto white keys ===
+        for (int note = 0; note < 128; note++)
+        {
+            if (PianoLayout.IsBlackKey[note % 12]) continue;
+            double topLeft = _layout.KeyTopLeft[note] + gap / 2;
+            double topRight = _layout.KeyTopRight[note] - gap / 2;
+            double shadowW = _layout.BlackKeyWidth * 0.35;
+
+            // Check left neighbor for black key
+            if (note > 0 && PianoLayout.IsBlackKey[(note - 1) % 12])
+            {
+                ctx.DrawRectangle(_blackKeyShadowLBrush, null,
+                    new Rect(topLeft, pianoY, shadowW, blackKeyH));
+            }
+            // Check right neighbor for black key
+            if (note < 127 && PianoLayout.IsBlackKey[(note + 1) % 12])
+            {
+                ctx.DrawRectangle(_blackKeyShadowRBrush, null,
+                    new Rect(topRight - shadowW, pianoY, shadowW, blackKeyH));
+            }
+        }
+
+        // === Black keys on top with glossy gradient ===
         for (int note = 0; note < 128; note++)
         {
             if (!PianoLayout.IsBlackKey[note % 12]) continue;
             int channel = activeKeyChannel[note];
+            bool isActive = channel >= 0;
+
             IBrush keyBrush;
-            if (channel >= 0)
+            if (isActive)
             {
                 var activeColor = ColorHelper.ResolveActiveKeyColor(
                     note, activeKeyChannel, activeKeyTrack,
                     _colorMode, _channelColors, _trackColors,
                     theme.ActiveHighlightColor, theme.ActiveBlackKeyBlend);
-                keyBrush = new SolidColorBrush(activeColor);
+                keyBrush = MakeBlackKeyGradient(activeColor);
             }
             else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))
             {
-                keyBrush = new SolidColorBrush(keyOverride);
+                keyBrush = MakeBlackKeyGradient(keyOverride);
             }
             else
             {
-                keyBrush = _blackKeyBrush;
+                keyBrush = _blackKeyGradient;
             }
 
             double x = _layout.KeyTopLeft[note] + gap / 2;
             double keyW = _layout.KeyTopRight[note] - _layout.KeyTopLeft[note] - gap;
-            var keyRect = new Rect(x, pianoY, keyW, blackKeyH);
+
+            // Depression: shift top down, reduce height
+            double blackTopY = isActive ? pianoY + blackKeyH * 0.04 : pianoY;
+            double blackH = isActive ? blackKeyH * 0.96 : blackKeyH;
+
+            var keyRect = new Rect(x, blackTopY, keyW, blackH);
             ctx.DrawRectangle(keyBrush, null, keyRect, 0, 2);
         }
+    }
+
+    private static LinearGradientBrush MakeWhiteKeyGradient(Color baseColor)
+    {
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0.3, 1, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(ColorHelper.Lighten(baseColor, 0.08), 0.0),
+                new GradientStop(baseColor, 0.7),
+                new GradientStop(ColorHelper.Darken(baseColor, 0.10), 1.0),
+            }
+        };
+    }
+
+    private static LinearGradientBrush MakeBlackKeyGradient(Color baseColor)
+    {
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0.5, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0.5, 1, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(ColorHelper.Lighten(baseColor, 0.25), 0.0),
+                new GradientStop(ColorHelper.Lighten(baseColor, 0.08), 0.12),
+                new GradientStop(baseColor, 0.35),
+                new GradientStop(ColorHelper.Darken(baseColor, 0.05), 1.0),
+            }
+        };
     }
 }

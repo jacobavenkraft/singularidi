@@ -19,13 +19,13 @@ There are no tests in this project.
 
 ## Architecture
 
-**Singularidi** is a cross-platform MIDI visualizer: falling-note animation + piano keyboard, with software synthesis or hardware MIDI output.
+**Singularidi** is a cross-platform MIDI visualizer with multiple visualization engines, a theming system, and MP4 video export. Supports software synthesis or hardware MIDI output.
 
 ### Data Flow
 
 1. User opens MIDI file → `MainWindowViewModel.OnMidiFileOpened()` → `MidiPlaybackEngine.Load()` → `MidiFileParser.Parse()` + `IAudioEngine.LoadFile()`
 2. User clicks Play → `MidiPlaybackEngine.Play()` → `IAudioEngine.Play()`
-3. `NoteVisualizerControl`'s 60fps `DispatcherTimer` calls `MidiPlaybackEngine.UpdateNoteEvents()` each tick, then redraws falling notes and piano keys
+3. `NoteVisualizerControl`'s 60fps `DispatcherTimer` calls `MidiPlaybackEngine.UpdateNoteEvents()` each tick, then delegates rendering to the active `IVisualizationEngine`
 
 Audio (NAudio/DryWetMidi) runs independently on its own thread; `MidiPlaybackEngine`'s `Stopwatch`-based clock is the single source of truth for `CurrentTime`.
 
@@ -35,22 +35,39 @@ Audio (NAudio/DryWetMidi) runs independently on its own thread; `MidiPlaybackEng
   - `SoundFontAudioEngine` — implements `IWaveProvider`; NAudio calls `Read()` on the audio thread to pull PCM16 from MeltySynth
   - `MidiDeviceAudioEngine` — wraps DryWetMidi `Playback` to send MIDI to hardware output
 - **`MidiPlaybackEngine`** (`Midi/`) — state machine (Idle/Loaded/Playing/Paused/Finished), owns the master `Stopwatch` clock, holds parsed `NoteEvent` list, delegates all sound to `IAudioEngine`
-- **`NoteVisualizerControl`** (`Controls/`) — custom Avalonia `Control`; renders entirely in `OnRender`. Notes fall top→bottom; Y position: `yBottom = vizHeight - (startSeconds - now) / LookAheadSeconds * vizHeight` with a 4-second lookahead. Piano keyboard occupies bottom 15% of the control.
-- **`MainWindowViewModel`** (`ViewModels/`) — `INotifyPropertyChanged`, all commands, switches audio engine at runtime via `RebuildAudioEngine()`
+- **`IVisualizationEngine`** (`Visualization/`) — interface for pluggable visualization rendering. Receives `DrawingContext`, dimensions, notes, time, theme, and active-key state per frame. Two implementations:
+  - `VerticalFallEngine` — classic top-to-bottom falling notes with piano at the bottom
+  - `HorizontalCrawlEngine` — 3D perspective (1/z projection) with notes approaching from a vanishing point, configurable sky fraction, depth ratio, and guide line fading
+- **`PianoLayout`** (`Visualization/`) — shared piano key geometry using "equal segments within groups" approach. CDE group = 5 equal segments, FGAB group = 7 equal segments. 75 white keys with uniform bottom widths and per-group segment widths at the top. Caches `XCenter[128]`, `NoteWidth[128]`, `KeyTopLeft/Right[128]`, `WhiteKeyBottomLeft/Right[128]`, `GuideXUniform[128]`, `OctaveBoundaryX`
+- **`ColorHelper`** (`Visualization/`) — note color resolution (channel/track/overrides) and color lerping
+- **`GuideLineStyle`** (`Visualization/`) — enum: `KeyWidthCentered`, `UniformCentered`, `Octave`
+- **`NoteVisualizerControl`** (`Controls/`) — thin Avalonia `Control` host; delegates all drawing to the active `IVisualizationEngine`
+- **`IVisualTheme` / `ThemeData`** (`Themes/`) — theme interface and serializable JSON implementation. Supports background/guide colors, note shape (Rectangular/DotBlock), corner radius, channel colors (16), track colors (variable), per-note and per-key color overrides, active highlight blending
+- **`ThemeRegistry`** (`Themes/`) — manages built-in + custom themes, persists custom themes to AppConfig
+- **`MainWindowViewModel`** (`ViewModels/`) — `INotifyPropertyChanged` via CommunityToolkit.Mvvm, all commands, visualization/theme/guide-line switching, audio engine management, MP4 export orchestration
 
 ### Configuration
 
-`ConfigService` persists `AppConfig` as JSON to `%APPDATA%\Singularidi\config.json`. Properties: `SoundFontPath`, `OutputMode` (SoundFont | MidiDevice), `PreferredMidiDevice`, `HighlightActiveNotes`, `LastMidiFilePath`.
+`ConfigService` persists `AppConfig` as JSON to `%APPDATA%\Singularidi\config.json`. Properties: `SoundFontPath`, `OutputMode`, `PreferredMidiDevice`, `HighlightActiveNotes`, `LastMidiFilePath`, `ThemeName`, `VisualizationType`, `GuideLineStyle`, `CustomThemes`, `FfmpegPath`, `ExportWidth`, `ExportHeight`, `ExportFps`.
 
 ### UI Layout
 
-`MainWindow.axaml` uses a `DockPanel`: menu bar → toolbar (Open/Play/Pause/Stop + status) → `NoteVisualizerControl` fills remaining space. Menu items for audio output mode and MIDI device selection are populated dynamically at runtime.
+`MainWindow.axaml` uses a `DockPanel`: menu bar → toolbar (Open/Play/Pause/Stop + status) → `NoteVisualizerControl` fills remaining space. Menus: File (Open, Export to MP4), View (Visualization, Guide Lines, Theme, Highlight Active Notes), Audio (output mode, device selection). `ThemeEditorWindow` provides a full theme editing UI.
+
+### MP4 Export Pipeline (`Export/`)
+
+- `OfflineAudioRenderer` — renders MIDI to WAV via MeltySynth (no NAudio playback, direct buffer writing)
+- `OfflineFrameRenderer` — captures visualization frames to raw pixel data via Avalonia's `RenderTargetBitmap`
+- `Mp4Exporter` — orchestrates: render WAV → pipe raw frames to FFmpeg stdin → produce MP4
+- `ExportSettings` — resolution, FPS, optional FFmpeg path override
+- Requires FFmpeg installed on the system (not bundled)
 
 ## Dependencies
 
 | Library | Version | Purpose |
 |---|---|---|
 | Avalonia | 11.2.3 | UI (Fluent dark theme) |
+| CommunityToolkit.Mvvm | latest | ObservableProperty, RelayCommand source generators |
 | Melanchall.DryWetMidi | 8.0.3 | MIDI parsing + hardware output |
 | MeltySynth | 2.2.0 | SoundFont synthesis |
 | NAudio | 2.2.1 | Audio streaming (WaveOutEvent — no native DLL) |

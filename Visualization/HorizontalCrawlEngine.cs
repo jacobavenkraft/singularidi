@@ -35,6 +35,12 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
     private Dictionary<int, Color>? _keyColorOverrides;
     private IVisualTheme? _cachedTheme;
 
+    // 3D piano key cached brushes
+    private LinearGradientBrush _whiteKeyTopGradient = null!;
+    private LinearGradientBrush _blackKeyTopGradient = null!;
+    private SolidColorBrush _whiteKeyFrontBrush = null!;
+    private SolidColorBrush _blackKeyFrontBrush = null!;
+
     // ── Configurable layout ─────────────────────────────────────────────
 
     /// <summary>Fraction of vertical space above the vanishing point (sky). Default 0.20 (20%).</summary>
@@ -82,6 +88,12 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         _trackColors = theme.TrackColors;
         _noteColorOverrides = theme.NoteColorOverrides;
         _keyColorOverrides = theme.KeyColorOverrides;
+
+        // 3D piano key brushes
+        _whiteKeyTopGradient = MakeWhiteKeyTopGradient(theme.WhiteKeyColor);
+        _blackKeyTopGradient = MakeBlackKeyTopGradient(theme.BlackKeyColor);
+        _whiteKeyFrontBrush = new SolidColorBrush(ColorHelper.Darken(theme.WhiteKeyColor, 0.15));
+        _blackKeyFrontBrush = new SolidColorBrush(ColorHelper.Darken(theme.BlackKeyColor, 0.20));
     }
 
     /// <summary>
@@ -269,28 +281,279 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         int[] activeKeyChannel,
         int[] activeKeyTrack)
     {
-        // White keys: from Znear (bottom, closest) to Zpiano (far edge / strike line)
-        // Black keys: sit at the far portion of the white keys
-        double blackZnear = Znear + (Zpiano - Znear) * 0.40;
+        double roadH = roadBottom - vanishY;
 
-        // White keys first
+        // Block heights (screen space at Znear for white, blackZnear for black)
+        double whiteFrontH = roadH * 0.020;    // white key block height
+        double blackFrontH = roadH * 0.014;    // black key elevation ABOVE white key
+        double blackTaper = roadH * 0.002;
+
+        // surfaceBottom = where white key top surface projects at Znear (above roadBottom)
+        double surfaceBottom = roadBottom - whiteFrontH;
+
+        // Black key near Z (40% from near to far)
+        double blackZnear = Znear + (Zpiano - Znear) * 0.40;
+        double scaleRatio = WidthScale3D(Zpiano) / WidthScale3D(blackZnear);
+
+        // Black key elevation at near and far edges (perspective-scaled)
+        double blackElevNear = blackFrontH;
+        double blackElevFar = blackFrontH * scaleRatio;
+
+        // ── Pivot model ──
+        // Keys pivot at the far end (Zpiano). When pressed:
+        //   sinkAtZ = maxSink * (Zpiano - Z) / (Zpiano - keyNearZ)
+        // i.e., full sink at near edge, zero at far edge.
+        double whiteMaxSink = whiteFrontH * 0.65;  // near edge sinks 65% of white block height
+        // Black key pressed: front sinks to white key surface level (full elevation gone)
+        // but back barely sinks.
+
+        // === Pass 1: White key front faces ===
         for (int note = 0; note < 128; note++)
         {
             if (PianoLayout.IsBlackKey[note % 12]) continue;
+            bool isActive = activeKeyChannel[note] >= 0;
             double noteX = _layout.XCenter[note];
-            IBrush keyBrush = ResolveKeyBrush(note, false, theme, activeKeyChannel, activeKeyTrack);
-            DrawPerspectiveKey(ctx, noteX, _layout.NoteWidth[note], Znear, Zpiano,
-                vanishX, vanishY, roadBottom, keyBrush, _whiteKeyBorderPen);
+            double kw = _layout.NoteWidth[note];
+            var (cx, _) = Project3D(noteX, Znear, vanishX, vanishY, surfaceBottom);
+            double halfW = kw * WidthScale3D(Znear) / 2;
+
+            // Pivot: near edge sinks most, far edge doesn't sink
+            double sinkNear = isActive ? whiteMaxSink : 0;
+            double frontTop = surfaceBottom + sinkNear;
+            double frontBot = roadBottom;
+
+            IBrush frontBrush;
+            if (isActive)
+            {
+                var activeColor = ResolveActiveKeyColor(note, theme, activeKeyChannel, activeKeyTrack, false);
+                frontBrush = new SolidColorBrush(ColorHelper.Darken(activeColor, 0.15));
+            }
+            else
+            {
+                frontBrush = _whiteKeyFrontBrush;
+            }
+
+            var geo = new StreamGeometry();
+            using (var sgCtx = geo.Open())
+            {
+                sgCtx.BeginFigure(new Point(cx - halfW, frontTop), true);
+                sgCtx.LineTo(new Point(cx + halfW, frontTop));
+                sgCtx.LineTo(new Point(cx + halfW, frontBot));
+                sgCtx.LineTo(new Point(cx - halfW, frontBot));
+                sgCtx.EndFigure(true);
+            }
+            ctx.DrawGeometry(frontBrush, _whiteKeyBorderPen, geo);
         }
 
-        // Black keys on top — at the far portion
+        // === Pass 2: White key top surfaces (pivot tilt) ===
+        for (int note = 0; note < 128; note++)
+        {
+            if (PianoLayout.IsBlackKey[note % 12]) continue;
+            bool isActive = activeKeyChannel[note] >= 0;
+            double noteX = _layout.XCenter[note];
+            double kw = _layout.NoteWidth[note];
+
+            // Pivot: sinkNear at front, sinkFar ≈ 0 at back
+            double sinkNear = isActive ? whiteMaxSink : 0;
+            double sinkFar = isActive ? whiteMaxSink * 0.05 : 0;
+
+            IBrush topBrush;
+            if (isActive)
+            {
+                var activeColor = ResolveActiveKeyColor(note, theme, activeKeyChannel, activeKeyTrack, false);
+                topBrush = MakeWhiteKeyTopGradient(activeColor);
+            }
+            else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var ov))
+            {
+                topBrush = MakeWhiteKeyTopGradient(ov);
+            }
+            else
+            {
+                topBrush = _whiteKeyTopGradient;
+            }
+
+            DrawPerspectiveKey(ctx, noteX, kw, Znear, Zpiano,
+                vanishX, vanishY, surfaceBottom, topBrush, _whiteKeyBorderPen,
+                sinkNear, sinkFar);
+        }
+
+        // === Pass 3: Shadow overlays — light from left, shadows fall to the RIGHT ===
+        // Shadows elongate when the receiving white key is pressed (surface drops, more black key exposed)
+        for (int note = 0; note < 128; note++)
+        {
+            if (PianoLayout.IsBlackKey[note % 12]) continue;
+            if (note > 0 && PianoLayout.IsBlackKey[(note - 1) % 12])
+            {
+                bool whiteIsActive = activeKeyChannel[note] >= 0;
+                // Wider shadow when white key is pressed (more black key block exposed)
+                double shadowFrac = whiteIsActive ? 0.50 : 0.35;
+                byte shadowAlpha = whiteIsActive ? (byte)50 : (byte)35;
+                var sBrush = new SolidColorBrush(Color.FromArgb(shadowAlpha, 0, 0, 0));
+                DrawShadowOverlay(ctx, noteX: _layout.XCenter[note],
+                    keyWidth: _layout.NoteWidth[note],
+                    zNear: blackZnear, zFar: Zpiano,
+                    vanishX, vanishY, surfaceBottom, sBrush, shadowFrac);
+            }
+        }
+
+        // === Pass 4: Black key front faces ===
+        // Top = elevated surface. Base = white key surface.
+        // Pressed: front sinks to white key level (elev → 0), pivots at back.
         for (int note = 0; note < 128; note++)
         {
             if (!PianoLayout.IsBlackKey[note % 12]) continue;
+            bool isActive = activeKeyChannel[note] >= 0;
             double noteX = _layout.XCenter[note];
-            IBrush keyBrush = ResolveKeyBrush(note, true, theme, activeKeyChannel, activeKeyTrack);
-            DrawPerspectiveKey(ctx, noteX, _layout.NoteWidth[note], blackZnear, Zpiano,
-                vanishX, vanishY, roadBottom, keyBrush, null);
+            double kw = _layout.NoteWidth[note];
+            var (cx, cy) = Project3D(noteX, blackZnear, vanishX, vanishY, surfaceBottom);
+            double halfW = kw * WidthScale3D(blackZnear) / 2;
+
+            // Pressed: front drops to white key level (zero elevation at near edge)
+            double elevAtFront = isActive ? 0 : blackElevNear;
+            double taper = blackTaper * (elevAtFront / Math.Max(blackElevNear, 0.001));
+
+            if (elevAtFront < 0.5) continue; // front face invisible when pressed
+
+            double frontTop = cy - elevAtFront;
+            double frontBot = cy;
+
+            IBrush frontBrush;
+            if (isActive)
+            {
+                var activeColor = ResolveActiveKeyColor(note, theme, activeKeyChannel, activeKeyTrack, true);
+                frontBrush = new SolidColorBrush(ColorHelper.Darken(activeColor, 0.20));
+            }
+            else
+            {
+                frontBrush = _blackKeyFrontBrush;
+            }
+
+            var geo = new StreamGeometry();
+            using (var sgCtx = geo.Open())
+            {
+                sgCtx.BeginFigure(new Point(cx - halfW, frontTop), true);
+                sgCtx.LineTo(new Point(cx + halfW, frontTop));
+                sgCtx.LineTo(new Point(cx + halfW + taper, frontBot));
+                sgCtx.LineTo(new Point(cx - halfW - taper, frontBot));
+                sgCtx.EndFigure(true);
+            }
+            ctx.DrawGeometry(frontBrush, null, geo);
+        }
+
+        // === Pass 5: Black key side faces ===
+        // Top = elevated surface (with pivot tilt when pressed).
+        // Bottom = white key surface level.
+        for (int note = 0; note < 128; note++)
+        {
+            if (!PianoLayout.IsBlackKey[note % 12]) continue;
+            bool isActive = activeKeyChannel[note] >= 0;
+            double noteX = _layout.XCenter[note];
+            double kw = _layout.NoteWidth[note];
+
+            var (cxNear, cyNear) = Project3D(noteX, blackZnear, vanishX, vanishY, surfaceBottom);
+            var (cxFar, cyFar) = Project3D(noteX, Zpiano, vanishX, vanishY, surfaceBottom);
+            double halfWNear = kw * WidthScale3D(blackZnear) / 2;
+            double halfWFar = kw * WidthScale3D(Zpiano) / 2;
+
+            // Pivot: near edge drops to white key level, far edge barely moves
+            double elevNear = isActive ? 0 : blackElevNear;
+            double elevFar = isActive ? blackElevFar * 0.85 : blackElevFar;
+            double taperNear = blackTaper * (elevNear / Math.Max(blackElevNear, 0.001));
+            double taperFar = blackTaper * scaleRatio;
+
+            double topNearY = cyNear - elevNear;
+            double topFarY = cyFar - elevFar;
+            double botNearY = cyNear;
+            double botFarY = cyFar;
+
+            IBrush sideBrush;
+            if (isActive)
+            {
+                var activeColor = ResolveActiveKeyColor(note, theme, activeKeyChannel, activeKeyTrack, true);
+                sideBrush = new SolidColorBrush(ColorHelper.Darken(activeColor, 0.30));
+            }
+            else
+            {
+                sideBrush = new SolidColorBrush(ColorHelper.Darken(theme.BlackKeyColor, 0.30));
+            }
+
+            bool showRightSide = cxNear < vanishX;
+            bool showLeftSide = cxNear > vanishX;
+
+            if (showRightSide)
+            {
+                var geo = new StreamGeometry();
+                using (var sgCtx = geo.Open())
+                {
+                    sgCtx.BeginFigure(new Point(cxNear + halfWNear, topNearY), true);
+                    sgCtx.LineTo(new Point(cxFar + halfWFar, topFarY));
+                    sgCtx.LineTo(new Point(cxFar + halfWFar + taperFar, botFarY));
+                    sgCtx.LineTo(new Point(cxNear + halfWNear + taperNear, botNearY));
+                    sgCtx.EndFigure(true);
+                }
+                ctx.DrawGeometry(sideBrush, null, geo);
+            }
+
+            if (showLeftSide)
+            {
+                var geo = new StreamGeometry();
+                using (var sgCtx = geo.Open())
+                {
+                    sgCtx.BeginFigure(new Point(cxNear - halfWNear, topNearY), true);
+                    sgCtx.LineTo(new Point(cxFar - halfWFar, topFarY));
+                    sgCtx.LineTo(new Point(cxFar - halfWFar - taperFar, botFarY));
+                    sgCtx.LineTo(new Point(cxNear - halfWNear - taperNear, botNearY));
+                    sgCtx.EndFigure(true);
+                }
+                ctx.DrawGeometry(sideBrush, null, geo);
+            }
+        }
+
+        // === Pass 6: Black key top surfaces (pivot tilt when pressed) ===
+        for (int note = 0; note < 128; note++)
+        {
+            if (!PianoLayout.IsBlackKey[note % 12]) continue;
+            bool isActive = activeKeyChannel[note] >= 0;
+            double noteX = _layout.XCenter[note];
+            double kw = _layout.NoteWidth[note];
+
+            var (cxNear, cyNear) = Project3D(noteX, blackZnear, vanishX, vanishY, surfaceBottom);
+            var (cxFar, cyFar) = Project3D(noteX, Zpiano, vanishX, vanishY, surfaceBottom);
+            double halfWNear = kw * WidthScale3D(blackZnear) / 2;
+            double halfWFar = kw * WidthScale3D(Zpiano) / 2;
+
+            // Pivot: near drops to white level, far barely moves
+            double elevNear = isActive ? 0 : blackElevNear;
+            double elevFar = isActive ? blackElevFar * 0.85 : blackElevFar;
+
+            double topNearY = cyNear - elevNear;
+            double topFarY = cyFar - elevFar;
+
+            IBrush topBrush;
+            if (isActive)
+            {
+                var activeColor = ResolveActiveKeyColor(note, theme, activeKeyChannel, activeKeyTrack, true);
+                topBrush = MakeBlackKeyTopGradient(activeColor);
+            }
+            else if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var ov))
+            {
+                topBrush = MakeBlackKeyTopGradient(ov);
+            }
+            else
+            {
+                topBrush = _blackKeyTopGradient;
+            }
+
+            var geo = new StreamGeometry();
+            using (var sgCtx = geo.Open())
+            {
+                sgCtx.BeginFigure(new Point(cxNear - halfWNear, topNearY), true);
+                sgCtx.LineTo(new Point(cxNear + halfWNear, topNearY));
+                sgCtx.LineTo(new Point(cxFar + halfWFar, topFarY));
+                sgCtx.LineTo(new Point(cxFar - halfWFar, topFarY));
+                sgCtx.EndFigure(true);
+            }
+            ctx.DrawGeometry(topBrush, null, geo);
         }
     }
 
@@ -304,10 +567,15 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         double vanishY,
         double roadBottom,
         IBrush brush,
-        IPen? pen)
+        IPen? pen,
+        double sinkNear = 0,
+        double sinkFar = 0)
     {
         var (cxNear, cyNear) = Project3D(noteX, zNear, vanishX, vanishY, roadBottom);
         var (cxFar, cyFar) = Project3D(noteX, zFar, vanishX, vanishY, roadBottom);
+
+        cyNear += sinkNear;
+        cyFar += sinkFar;
 
         double halfWNear = keyWidth * WidthScale3D(zNear) / 2;
         double halfWFar = keyWidth * WidthScale3D(zFar) / 2;
@@ -322,6 +590,58 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
             sgCtx.EndFigure(true);
         }
         ctx.DrawGeometry(brush, pen, geo);
+    }
+
+    /// <summary>
+    /// Draws a shadow on the LEFT edge of a white key (cast by a black key to its left).
+    /// Light source is to the left, so shadows fall rightward.
+    /// </summary>
+    private void DrawShadowOverlay(
+        DrawingContext ctx,
+        double noteX,
+        double keyWidth,
+        double zNear,
+        double zFar,
+        double vanishX,
+        double vanishY,
+        double roadBottom,
+        IBrush shadowBrush,
+        double shadowFrac = 0.35)
+    {
+        var (cxNear, cyNear) = Project3D(noteX, zNear, vanishX, vanishY, roadBottom);
+        var (cxFar, cyFar) = Project3D(noteX, zFar, vanishX, vanishY, roadBottom);
+
+        double halfWNear = keyWidth * WidthScale3D(zNear) / 2;
+        double halfWFar = keyWidth * WidthScale3D(zFar) / 2;
+
+        // Shadow covers the left portion of the white key's top surface
+        double nL = cxNear - halfWNear;
+        double nR = cxNear - halfWNear + halfWNear * 2 * shadowFrac;
+        double fL = cxFar - halfWFar;
+        double fR = cxFar - halfWFar + halfWFar * 2 * shadowFrac;
+
+        var geo = new StreamGeometry();
+        using (var sgCtx = geo.Open())
+        {
+            sgCtx.BeginFigure(new Point(nL, cyNear), true);
+            sgCtx.LineTo(new Point(nR, cyNear));
+            sgCtx.LineTo(new Point(fR, cyFar));
+            sgCtx.LineTo(new Point(fL, cyFar));
+            sgCtx.EndFigure(true);
+        }
+        ctx.DrawGeometry(shadowBrush, null, geo);
+    }
+
+    private Color ResolveActiveKeyColor(
+        int note, IVisualTheme theme,
+        int[] activeKeyChannel, int[] activeKeyTrack,
+        bool isBlack)
+    {
+        float blend = isBlack ? theme.ActiveBlackKeyBlend : theme.ActiveWhiteKeyBlend;
+        return ColorHelper.ResolveActiveKeyColor(
+            note, activeKeyChannel, activeKeyTrack,
+            _colorMode, _channelColors, _trackColors,
+            theme.ActiveHighlightColor, blend);
     }
 
     private void DrawPerspectiveGuideLines(
@@ -413,27 +733,33 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         }
     }
 
-    private IBrush ResolveKeyBrush(
-        int note,
-        bool isBlack,
-        IVisualTheme theme,
-        int[] activeKeyChannel,
-        int[] activeKeyTrack)
+    private static LinearGradientBrush MakeWhiteKeyTopGradient(Color baseColor)
     {
-        int channel = activeKeyChannel[note];
-        if (channel >= 0)
+        return new LinearGradientBrush
         {
-            float blend = isBlack ? theme.ActiveBlackKeyBlend : theme.ActiveWhiteKeyBlend;
-            var activeColor = ColorHelper.ResolveActiveKeyColor(
-                note, activeKeyChannel, activeKeyTrack,
-                _colorMode, _channelColors, _trackColors,
-                theme.ActiveHighlightColor, blend);
-            return new SolidColorBrush(activeColor);
-        }
+            StartPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(ColorHelper.Lighten(baseColor, 0.06), 0.0),
+                new GradientStop(baseColor, 0.4),
+                new GradientStop(ColorHelper.Darken(baseColor, 0.12), 1.0),
+            }
+        };
+    }
 
-        if (_keyColorOverrides != null && _keyColorOverrides.TryGetValue(note, out var keyOverride))
-            return new SolidColorBrush(keyOverride);
-
-        return isBlack ? _blackKeyBrush : _whiteKeyBrush;
+    private static LinearGradientBrush MakeBlackKeyTopGradient(Color baseColor)
+    {
+        return new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            GradientStops =
+            {
+                new GradientStop(ColorHelper.Lighten(baseColor, 0.15), 0.0),
+                new GradientStop(baseColor, 0.3),
+                new GradientStop(ColorHelper.Darken(baseColor, 0.08), 1.0),
+            }
+        };
     }
 }

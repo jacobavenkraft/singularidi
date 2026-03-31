@@ -56,4 +56,20 @@ public static class ColorHelper
 
         return LerpToColor(keyBase, highlightColor, blendFactor);
     }
+
+    public static Color Lighten(Color c, double amount)
+    {
+        byte r = (byte)(c.R + (255 - c.R) * amount);
+        byte g = (byte)(c.G + (255 - c.G) * amount);
+        byte b = (byte)(c.B + (255 - c.B) * amount);
+        return Color.FromArgb(c.A, r, g, b);
+    }
+
+    public static Color Darken(Color c, double amount)
+    {
+        byte r = (byte)(c.R * (1 - amount));
+        byte g = (byte)(c.G * (1 - amount));
+        byte b = (byte)(c.B * (1 - amount));
+        return Color.FromArgb(c.A, r, g, b);
+    }
 }

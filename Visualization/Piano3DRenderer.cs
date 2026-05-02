@@ -18,8 +18,10 @@ public enum PianoProjectionMode
 /// projects it using engine-specific projection (not a generic 3D camera) so that
 /// the keyboard aligns perfectly with the existing note/guideline rendering.
 /// </summary>
-public sealed class Piano3DRenderer
+public sealed class Piano3DRenderer : IPianoKeyRenderer
 {
+    public string Name => "Software";
+
     private readonly Piano3DGeometry _geometry = new();
 
     // Projection

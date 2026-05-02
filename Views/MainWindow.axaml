@@ -36,6 +36,7 @@
         <Separator/>
         <MenuItem Header="Visualization" Classes="dynamic" ItemsSource="{Binding VisualizationMenuItems}"/>
         <MenuItem Header="Guide Lines" Classes="dynamic" ItemsSource="{Binding GuideLineStyleMenuItems}"/>
+        <MenuItem Header="Piano Renderer" Classes="dynamic" ItemsSource="{Binding PianoRenderModeMenuItems}"/>
         <Separator/>
         <MenuItem Header="Theme" Classes="dynamic" ItemsSource="{Binding ThemeMenuItems}"/>
       </MenuItem>
@@ -67,7 +68,7 @@
     </StackPanel>
 
     <!-- Visualizer fills remaining space -->
-    <controls:NoteVisualizerControl
+    <controls:NoteVisualizerControl x:Name="Visualizer"
         VisualTheme="{Binding CurrentTheme}"
         HighlightActiveNotes="{Binding HighlightActiveNotes}"
         Engine="{Binding Engine}"

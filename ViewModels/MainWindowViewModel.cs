@@ -66,6 +66,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ObservableCollection<MenuItemViewModel> MidiDeviceMenuItems { get; } = new();
     public ObservableCollection<MenuItemViewModel> VisualizationMenuItems { get; } = new();
     public ObservableCollection<MenuItemViewModel> GuideLineStyleMenuItems { get; } = new();
+    public ObservableCollection<MenuItemViewModel> PianoRenderModeMenuItems { get; } = new();
+
+    // GPU piano rendering
+    private Piano3DGpuBackend? _gpuBackend;
+    private string _pianoRenderMode = "Software";
 
     // ── Constructor ────────────────────────────────────────────────────────
 
@@ -91,6 +96,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         RefreshThemeMenuItems();
         RefreshVisualizationMenuItems();
         RefreshGuideLineStyleMenuItems();
+        RefreshPianoRenderModeMenuItems();
         RebuildAudioEngine();
 
         // Restore last-used visualization
@@ -102,6 +108,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (!string.IsNullOrEmpty(config.GuideLineStyle) &&
             Enum.TryParse<GuideLineStyle>(config.GuideLineStyle, out var savedStyle))
             ApplyGuideLineStyle(savedStyle);
+
+        // Restore piano render mode
+        if (config.PianoRenderMode == "GPU")
+            SetPianoRenderMode("GPU");
 
         if (string.IsNullOrEmpty(config.SoundFontPath) && config.OutputMode == AudioOutputMode.SoundFont)
             StatusText = "No SoundFont configured — use Audio menu to select one";
@@ -382,6 +392,39 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ── Piano render mode commands ──────────────────────────────────────────
+
+    /// <summary>Event fired when the GL overlay should be attached/detached from the visualizer control.</summary>
+    public event Action<PianoGlControl?>? GlOverlayChanged;
+
+    [RelayCommand]
+    private void SetPianoRenderMode(string mode)
+    {
+        _pianoRenderMode = mode;
+        _config.PianoRenderMode = mode;
+        _configService.Save(_config);
+
+        if (mode == "GPU")
+        {
+            _gpuBackend ??= new Piano3DGpuBackend();
+            foreach (var viz in _availableVisualizations)
+            {
+                if (viz is VerticalFallEngine vfe) vfe.PianoKeyRenderer = _gpuBackend;
+                else if (viz is HorizontalCrawlEngine hce) hce.PianoKeyRenderer = _gpuBackend;
+            }
+            GlOverlayChanged?.Invoke(_gpuBackend.GlControl);
+        }
+        else
+        {
+            foreach (var viz in _availableVisualizations)
+            {
+                if (viz is VerticalFallEngine vfe) vfe.PianoKeyRenderer = new Piano3DRenderer();
+                else if (viz is HorizontalCrawlEngine hce) hce.PianoKeyRenderer = new Piano3DRenderer();
+            }
+            GlOverlayChanged?.Invoke(null);
+        }
+    }
+
     public void RegisterVisualization(IVisualizationEngine engine)
     {
         if (_availableVisualizations.All(v => v.Name != engine.Name))
@@ -424,6 +467,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var display = System.Text.RegularExpressions.Regex.Replace(name, "(?<!^)([A-Z])", " $1");
             GuideLineStyleMenuItems.Add(new MenuItemViewModel(display, new RelayCommand(() => SetGuideLineStyle(name))));
         }
+    }
+
+    private void RefreshPianoRenderModeMenuItems()
+    {
+        PianoRenderModeMenuItems.Clear();
+        PianoRenderModeMenuItems.Add(new MenuItemViewModel("Software", new RelayCommand(() => SetPianoRenderMode("Software"))));
+        PianoRenderModeMenuItems.Add(new MenuItemViewModel("GPU", new RelayCommand(() => SetPianoRenderMode("GPU"))));
     }
 
     private void RefreshMidiDeviceMenuItems()

@@ -12,6 +12,7 @@ public class AppConfig
     public string ThemeName { get; set; } = "Dark";
     public string VisualizationType { get; set; } = "Vertical Fall";
     public string GuideLineStyle { get; set; } = "KeyWidthCentered";
+    public string PianoRenderMode { get; set; } = "Software";
     public List<ThemeData>? CustomThemes { get; set; }
 
     // Export settings

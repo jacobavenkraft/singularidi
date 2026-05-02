@@ -58,6 +58,9 @@ public sealed class NoteVisualizerControl : Control
 
     private readonly DispatcherTimer _renderTimer;
 
+    // GPU overlay
+    private PianoGlControl? _glOverlay;
+
     // ── Constructor ─────────────────────────────────────────────────────
 
     public NoteVisualizerControl()
@@ -67,6 +70,43 @@ public sealed class NoteVisualizerControl : Control
         _renderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _renderTimer.Tick += OnRenderTick;
         _renderTimer.Start();
+    }
+
+    /// <summary>
+    /// Attach or detach the GPU piano overlay control.
+    /// When attached, the GL control renders piano keys via OpenGL on top of the 2D visualization.
+    /// </summary>
+    public void SetGlOverlay(PianoGlControl? glControl)
+    {
+        if (_glOverlay == glControl) return;
+
+        if (_glOverlay != null)
+        {
+            VisualChildren.Remove(_glOverlay);
+            LogicalChildren.Remove(_glOverlay);
+        }
+
+        _glOverlay = glControl;
+
+        if (_glOverlay != null)
+        {
+            LogicalChildren.Add(_glOverlay);
+            VisualChildren.Add(_glOverlay);
+        }
+
+        InvalidateArrange();
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _glOverlay?.Arrange(new Rect(finalSize));
+        return finalSize;
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        _glOverlay?.Measure(availableSize);
+        return availableSize;
     }
 
     private void OnRenderTick(object? sender, EventArgs e)

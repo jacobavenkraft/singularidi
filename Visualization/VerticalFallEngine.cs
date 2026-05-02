@@ -13,7 +13,13 @@ public sealed class VerticalFallEngine : IVisualizationEngine
     public GuideLineStyle GuideLineStyle { get; set; } = GuideLineStyle.KeyWidthCentered;
 
     private readonly PianoLayout _layout = new();
-    private readonly Piano3DRenderer _pianoRenderer = new();
+    private IPianoKeyRenderer _pianoRenderer = new Piano3DRenderer();
+
+    public IPianoKeyRenderer PianoKeyRenderer
+    {
+        get => _pianoRenderer;
+        set => _pianoRenderer = value;
+    }
 
     // Cached brushes/pens rebuilt when theme changes
     private IBrush _backgroundBrush = null!;

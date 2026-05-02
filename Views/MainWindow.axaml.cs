@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Singularidi.Visualization;
 using Singularidi.ViewModels;
 
 namespace Singularidi.Views;
@@ -13,6 +14,12 @@ public partial class MainWindow : Window
         DataContext = vm;
         vm.ExitRequested += Close;
         vm.ShowExportProgress += OnShowExportProgress;
+        vm.GlOverlayChanged += OnGlOverlayChanged;
+    }
+
+    private void OnGlOverlayChanged(PianoGlControl? glControl)
+    {
+        Visualizer.SetGlOverlay(glControl);
     }
 
     private async Task OnShowExportProgress(ExportProgressViewModel progressVm)
@@ -27,6 +34,7 @@ public partial class MainWindow : Window
         {
             vm.ExitRequested -= Close;
             vm.ShowExportProgress -= OnShowExportProgress;
+            vm.GlOverlayChanged -= OnGlOverlayChanged;
             vm.Dispose();
         }
         base.OnClosed(e);

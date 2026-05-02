@@ -23,7 +23,13 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
     public GuideLineStyle GuideLineStyle { get; set; } = GuideLineStyle.KeyWidthCentered;
 
     private readonly PianoLayout _layout = new();
-    private readonly Piano3DRenderer _pianoRenderer = new();
+    private IPianoKeyRenderer _pianoRenderer = new Piano3DRenderer();
+
+    public IPianoKeyRenderer PianoKeyRenderer
+    {
+        get => _pianoRenderer;
+        set => _pianoRenderer = value;
+    }
 
     private IBrush _backgroundBrush = null!;
     private IPen _guidePen = null!;

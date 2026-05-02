@@ -14,6 +14,12 @@ public sealed class GpuPianoMesh
     public uint[] Indices { get; private set; } = [];
     public int TriangleCount { get; private set; }
 
+    // Edge index pairs (GL_LINES) outlining each triangulated face. The software
+    // renderer draws a 0.3px black border on white-key faces; running these as a
+    // line pass after the fill pass gives the GPU output equivalent crispness.
+    public uint[] LineIndices { get; private set; } = [];
+    public int LineIndexCount { get; private set; }
+
     /// <summary>
     /// Rebuild GPU buffers from the current Piano3DGeometry faces.
     /// Call after Piano3DGeometry.RebuildIfNeeded() and AddShadowQuads().
@@ -33,6 +39,7 @@ public sealed class GpuPianoMesh
 
         var verts = new float[totalVerts * FloatsPerVertex];
         var indices = new uint[totalTris * 3];
+        var lineIndices = new List<uint>();
         int vi = 0; // vertex index (count of vertices added)
         int ii = 0; // index index
 
@@ -68,10 +75,28 @@ public sealed class GpuPianoMesh
                 indices[ii++] = (uint)(baseVertex + i);
                 indices[ii++] = (uint)(baseVertex + i + 1);
             }
+
+            // Outline the polygon's perimeter for white-key faces only — matches
+            // the software renderer's borderPen scope (WhiteIvory/WhiteWood faces).
+            // SkipOutlineEdge lets the geometry suppress specific edges (e.g. the
+            // boundary between the wide and narrow ivory-top sub-faces).
+            if (face.Part == FacePart.WhiteIvory || face.Part == FacePart.WhiteWood)
+            {
+                int n = face.Vertices.Length;
+                var skip = face.SkipOutlineEdge;
+                for (int e = 0; e < n; e++)
+                {
+                    if (skip != null && e < skip.Length && skip[e]) continue;
+                    lineIndices.Add((uint)(baseVertex + e));
+                    lineIndices.Add((uint)(baseVertex + (e + 1) % n));
+                }
+            }
         }
 
         Vertices = verts;
         Indices = indices;
         TriangleCount = totalTris;
+        LineIndices = lineIndices.ToArray();
+        LineIndexCount = LineIndices.Length;
     }
 }

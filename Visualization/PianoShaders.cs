@@ -74,9 +74,10 @@ public static class PianoShaders
             vec3 pos = aPosition;
             vec3 norm = aNormal;
 
-            // Apply pivot depression for active keys
+            // Apply pivot depression for active keys.
+            // All keys hinge at the back of the keyboard (z = uKeyLength), like a real piano.
             if (isActive) {
-                float pivotZ = isBlackKey(keyIdx) ? uBlackKeyLength : uKeyLength;
+                float pivotZ = uKeyLength;
                 float angle = isBlackKey(keyIdx) ? uBlackPivotAngle : uWhitePivotAngle;
 
                 float dz = pos.z - pivotZ;
@@ -156,9 +157,17 @@ public static class PianoShaders
         // Per-key colors (128x1 RGBA texture)
         uniform sampler2D uKeyColors;
 
+        // When set, output a flat dark color (used by the outline pass over white keys).
+        uniform float uLineMode;
+
         out vec4 fragColor;
 
         void main() {
+            if (uLineMode > 0.5) {
+                fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                return;
+            }
+
             float texU = (vKeyIndex + 0.5) / 128.0;
             int facePart = int(vFacePart + 0.5);
 

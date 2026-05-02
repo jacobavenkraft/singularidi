@@ -17,6 +17,11 @@ public struct Face3D
     public Vector3 Normal;       // outward-facing normal
     public int KeyIndex;         // MIDI note number (0-127)
     public FacePart Part;
+    /// <summary>Optional per-edge flag (length = Vertices.Length); when SkipOutlineEdge[i] is
+    /// true, the GPU outline pass omits the edge from Vertices[i] to Vertices[(i+1) % N].
+    /// Used to hide interior edges shared between two coplanar faces of the same key
+    /// (e.g. the boundary between the wide and narrow ivory-top sections of a white key).</summary>
+    public bool[]? SkipOutlineEdge;
 }
 
 /// <summary>
@@ -168,16 +173,26 @@ public sealed class Piano3DGeometry
 
         frontTopVerts.Add(new Vector3(botR, iy, zDivider));
 
-        // Add as a polygon face (fan from first vertex)
-        AddPolygon(note, FacePart.WhiteIvory, frontTopVerts.ToArray(), Vector3.UnitY);
+        // Add as a polygon face (fan from first vertex). The closing edge (last
+        // vertex back to vertex 0) is the wide section's straight back edge at
+        // z=zDivider. We suppress it from the GPU outline pass — drawing it would
+        // produce a horizontal line crossing the key at the divider. The legitimate
+        // L-step corners are still outlined by the inner-step faces' top edges.
+        var wideTop = frontTopVerts.ToArray();
+        var wideTopSkip = new bool[wideTop.Length];
+        wideTopSkip[^1] = true;
+        AddPolygon(note, FacePart.WhiteIvory, wideTop, Vector3.UnitY, wideTopSkip);
 
-        // Back narrow section: from zDivider to zBack
+        // Back narrow section: from zDivider to zBack. Edge 0 (front edge from
+        // (topL,iy,zDivider) to (topR,iy,zDivider)) coincides with the suppressed
+        // wide-top back edge — skip it for the same reason.
         AddQuad(note, FacePart.WhiteIvory,
             new Vector3(topL, iy, zDivider),
             new Vector3(topR, iy, zDivider),
             new Vector3(topR, iy, zBack),
             new Vector3(topL, iy, zBack),
-            Vector3.UnitY);
+            Vector3.UnitY,
+            skipOutlineEdge: [true, false, false, false]);
 
         // Ivory front face (the overhanging lip at Z = zFront)
         // Build this with the chamfered shape too
@@ -426,7 +441,7 @@ public sealed class Piano3DGeometry
         }
     }
 
-    private void AddQuad(int keyIndex, FacePart part, Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 normal)
+    private void AddQuad(int keyIndex, FacePart part, Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 normal, bool[]? skipOutlineEdge = null)
     {
         _faces.Add(new Face3D
         {
@@ -434,10 +449,11 @@ public sealed class Piano3DGeometry
             Normal = normal,
             KeyIndex = keyIndex,
             Part = part,
+            SkipOutlineEdge = skipOutlineEdge,
         });
     }
 
-    private void AddPolygon(int keyIndex, FacePart part, Vector3[] vertices, Vector3 normal)
+    private void AddPolygon(int keyIndex, FacePart part, Vector3[] vertices, Vector3 normal, bool[]? skipOutlineEdge = null)
     {
         _faces.Add(new Face3D
         {
@@ -445,6 +461,7 @@ public sealed class Piano3DGeometry
             Normal = normal,
             KeyIndex = keyIndex,
             Part = part,
+            SkipOutlineEdge = skipOutlineEdge,
         });
     }
 

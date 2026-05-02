@@ -20,6 +20,8 @@ public sealed class PianoGlControl : OpenGlControlBase
     private const int GL_SRC_ALPHA = 0x0302;
     private const int GL_ONE_MINUS_SRC_ALPHA = 0x0303;
     private const int GL_LEQUAL = 0x0203;
+    private const int GL_LINES = 0x0001;
+    private const int GL_POLYGON_OFFSET_FILL = 0x8037;
     private const int GL_TRUE = 1;
     private const int GL_FALSE = 0;
     private const int GL_TEXTURE1 = GL_TEXTURE0 + 1;
@@ -28,20 +30,26 @@ public sealed class PianoGlControl : OpenGlControlBase
     private delegate void GlUniform1iDelegate(int location, int value);
     private delegate void GlUniform3fDelegate(int location, float v0, float v1, float v2);
     private delegate void GlBlendFuncDelegate(int sfactor, int dfactor);
+    private delegate void GlPolygonOffsetDelegate(float factor, float units);
+    private delegate void GlLineWidthDelegate(float width);
     private delegate int GlGetErrorDelegate();
 
     private GlUniform1iDelegate _glUniform1i = null!;
     private GlUniform3fDelegate _glUniform3f = null!;
     private GlBlendFuncDelegate _glBlendFunc = null!;
+    private GlPolygonOffsetDelegate _glPolygonOffset = null!;
+    private GlLineWidthDelegate _glLineWidth = null!;
 
     // GL resources
     private int _program;
     private int _vao;
     private int _vbo;
     private int _ebo;
+    private int _lineEbo;
     private int _keyColorTex;   // 128x1 RGBA texture for per-key colors
     private int _keyActiveTex;  // 128x1 R texture for active flags
     private int _indexCount;
+    private int _lineIndexCount;
 
     // Uniform locations
     private int _uProjectionMode;
@@ -52,6 +60,7 @@ public sealed class PianoGlControl : OpenGlControlBase
     private int _uWhitePivotAngle, _uBlackPivotAngle;
     private int _uKeyColors, _uKeyActive;
     private int _uLightDirection, _uAmbientIntensity;
+    private int _uLineMode;
 
     // State set by the backend each frame
     private readonly GpuPianoMesh _mesh = new();
@@ -163,6 +172,8 @@ public sealed class PianoGlControl : OpenGlControlBase
             _glUniform1i = Marshal.GetDelegateForFunctionPointer<GlUniform1iDelegate>(gl.GetProcAddress("glUniform1i"));
             _glUniform3f = Marshal.GetDelegateForFunctionPointer<GlUniform3fDelegate>(gl.GetProcAddress("glUniform3f"));
             _glBlendFunc = Marshal.GetDelegateForFunctionPointer<GlBlendFuncDelegate>(gl.GetProcAddress("glBlendFunc"));
+            _glPolygonOffset = Marshal.GetDelegateForFunctionPointer<GlPolygonOffsetDelegate>(gl.GetProcAddress("glPolygonOffset"));
+            _glLineWidth = Marshal.GetDelegateForFunctionPointer<GlLineWidthDelegate>(gl.GetProcAddress("glLineWidth"));
 
             // Compile shaders
             _program = CreateShaderProgram(gl);
@@ -194,11 +205,13 @@ public sealed class PianoGlControl : OpenGlControlBase
             _uKeyActive = gl.GetUniformLocationString(_program, "uKeyActive");
             _uLightDirection = gl.GetUniformLocationString(_program, "uLightDirection");
             _uAmbientIntensity = gl.GetUniformLocationString(_program, "uAmbientIntensity");
+            _uLineMode = gl.GetUniformLocationString(_program, "uLineMode");
 
-            // Create VAO, VBO, EBO
+            // Create VAO, VBO, EBOs (one for triangles, one for outline lines)
             _vao = gl.GenVertexArray();
             _vbo = gl.GenBuffer();
             _ebo = gl.GenBuffer();
+            _lineEbo = gl.GenBuffer();
 
             // Create textures for per-key data
             _keyColorTex = gl.GenTexture();
@@ -266,6 +279,18 @@ public sealed class PianoGlControl : OpenGlControlBase
         }
         _indexCount = _mesh.Indices.Length;
 
+        gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, _lineEbo);
+        fixed (uint* lData = _mesh.LineIndices)
+        {
+            gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,
+                new IntPtr(_mesh.LineIndices.Length * sizeof(uint)),
+                new IntPtr(lData), GL_STATIC_DRAW);
+        }
+        _lineIndexCount = _mesh.LineIndexCount;
+
+        // Re-bind triangle EBO for the fill pass.
+        gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, _ebo);
+
         // Set up vertex attributes
         int stride = GpuPianoMesh.FloatsPerVertex * sizeof(float);
         // position (location 0)
@@ -332,8 +357,23 @@ public sealed class PianoGlControl : OpenGlControlBase
         gl.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 128, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, new IntPtr(activeRgba));
         _glUniform1i(_uKeyActive, 1); // texture unit 1
 
-        // Draw
+        // Fill pass — push fills slightly back in depth so the outline pass that
+        // follows can pass GL_LEQUAL without z-fighting on shared vertex positions.
+        gl.Uniform1f(_uLineMode, 0f);
+        gl.Enable(GL_POLYGON_OFFSET_FILL);
+        _glPolygonOffset(1f, 1f);
         gl.DrawElements(GL_TRIANGLES, _indexCount, GL_UNSIGNED_INT, IntPtr.Zero);
+        gl.Disable(GL_POLYGON_OFFSET_FILL);
+
+        // Outline pass — emulates the software renderer's 0.3px borderPen on
+        // white-key faces (only WhiteIvory/WhiteWood edges are in _lineEbo).
+        if (_lineIndexCount > 0)
+        {
+            gl.Uniform1f(_uLineMode, 1f);
+            _glLineWidth(1f);
+            gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, _lineEbo);
+            gl.DrawElements(GL_LINES, _lineIndexCount, GL_UNSIGNED_INT, IntPtr.Zero);
+        }
 
         // Cleanup state
         gl.Disable(GL_DEPTH_TEST);
@@ -348,10 +388,11 @@ public sealed class PianoGlControl : OpenGlControlBase
         if (_vao != 0) gl.DeleteVertexArray(_vao);
         if (_vbo != 0) gl.DeleteBuffer(_vbo);
         if (_ebo != 0) gl.DeleteBuffer(_ebo);
+        if (_lineEbo != 0) gl.DeleteBuffer(_lineEbo);
         if (_keyColorTex != 0) gl.DeleteTexture(_keyColorTex);
         if (_keyActiveTex != 0) gl.DeleteTexture(_keyActiveTex);
 
-        _program = _vao = _vbo = _ebo = _keyColorTex = _keyActiveTex = 0;
+        _program = _vao = _vbo = _ebo = _lineEbo = _keyColorTex = _keyActiveTex = 0;
         IsInitialized = false;
     }
 

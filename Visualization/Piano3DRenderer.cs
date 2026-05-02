@@ -82,9 +82,8 @@ public sealed class Piano3DRenderer : IPianoKeyRenderer
 
             if (isActive)
             {
-                float pivotZ = PianoLayout.IsBlackKey[key % 12]
-                    ? _geometry.BlackKeyLength
-                    : _geometry.KeyLength;
+                // All keys hinge at the back of the keyboard (z = KeyLength), like a real piano.
+                float pivotZ = _geometry.KeyLength;
                 float angle = PianoLayout.IsBlackKey[key % 12]
                     ? BlackPivotAngle
                     : WhitePivotAngle;
@@ -179,9 +178,7 @@ public sealed class Piano3DRenderer : IPianoKeyRenderer
             Vector3[] verts;
             if (isActive)
             {
-                float pivotZ = PianoLayout.IsBlackKey[key % 12]
-                    ? _geometry.BlackKeyLength
-                    : _geometry.KeyLength;
+                float pivotZ = _geometry.KeyLength;
                 float angle = PianoLayout.IsBlackKey[key % 12]
                     ? BlackPivotAngle
                     : WhitePivotAngle;

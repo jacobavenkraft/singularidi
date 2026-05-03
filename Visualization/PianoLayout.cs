@@ -190,4 +190,47 @@ public sealed class PianoLayout
         if (noteNumber < 0 || noteNumber >= 128) return -1;
         return WhiteKeyBottomLeft[noteNumber];
     }
+
+    /// <summary>
+    /// Find the MIDI note at a layout-space X position.
+    /// </summary>
+    /// <param name="x">X coordinate in the layout's coordinate space (0 = leftmost key edge).</param>
+    /// <param name="useTopGeometry">
+    /// True to test the narrow-top region (where black keys exist) — black keys win over white narrow tops.
+    /// False to test the wide-bottom region — only white keys can match.
+    /// </param>
+    public int? FindNoteAtX(double x, bool useTopGeometry)
+    {
+        if (useTopGeometry)
+        {
+            for (int note = 0; note < 128; note++)
+            {
+                if (!IsBlackKey[note % 12]) continue;
+                double l = KeyTopLeft[note];
+                double r = KeyTopRight[note];
+                if (l < 0) continue;
+                if (x >= l && x < r) return note;
+            }
+            for (int note = 0; note < 128; note++)
+            {
+                if (IsBlackKey[note % 12]) continue;
+                double l = KeyTopLeft[note];
+                double r = KeyTopRight[note];
+                if (l < 0) continue;
+                if (x >= l && x < r) return note;
+            }
+        }
+        else
+        {
+            for (int note = 0; note < 128; note++)
+            {
+                if (IsBlackKey[note % 12]) continue;
+                double l = WhiteKeyBottomLeft[note];
+                double r = WhiteKeyBottomRight[note];
+                if (l < 0) continue;
+                if (x >= l && x < r) return note;
+            }
+        }
+        return null;
+    }
 }

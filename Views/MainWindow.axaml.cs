@@ -15,6 +15,8 @@ public partial class MainWindow : Window
         vm.ExitRequested += Close;
         vm.ShowExportProgress += OnShowExportProgress;
         vm.GlOverlayChanged += OnGlOverlayChanged;
+        Visualizer.KeyPressed += vm.OnKeyPressed;
+        Visualizer.KeyReleased += vm.OnKeyReleased;
     }
 
     private void OnGlOverlayChanged(PianoGlControl? glControl)
@@ -35,6 +37,8 @@ public partial class MainWindow : Window
             vm.ExitRequested -= Close;
             vm.ShowExportProgress -= OnShowExportProgress;
             vm.GlOverlayChanged -= OnGlOverlayChanged;
+            Visualizer.KeyPressed -= vm.OnKeyPressed;
+            Visualizer.KeyReleased -= vm.OnKeyReleased;
             vm.Dispose();
         }
         base.OnClosed(e);

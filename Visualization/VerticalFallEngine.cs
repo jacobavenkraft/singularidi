@@ -6,9 +6,11 @@ using Singularidi.Themes;
 
 namespace Singularidi.Visualization;
 
-public sealed class VerticalFallEngine : IVisualizationEngine
+public sealed class VerticalFallEngine : IVisualizationEngine, IPianoHitTester
 {
     public string Name => "Vertical Fall";
+
+    public IPianoHitTester HitTester => this;
 
     public GuideLineStyle GuideLineStyle { get; set; } = GuideLineStyle.KeyWidthCentered;
 
@@ -145,5 +147,23 @@ public sealed class VerticalFallEngine : IVisualizationEngine
         _pianoRenderer.BlackPivotAngle = 0.035f;
 
         _pianoRenderer.Render(ctx, _layout, theme, activeKeyChannel, activeKeyTrack);
+    }
+
+    public int? HitTest(double screenX, double screenY, double width, double height)
+    {
+        if (width <= 0 || height <= 0) return null;
+        if (screenX < 0 || screenX > width) return null;
+
+        _layout.RebuildIfNeeded(width);
+
+        double pianoHeight = height * PianoLayout.PianoHeightFraction;
+        double pianoY = height - pianoHeight;
+        if (screenY < pianoY || screenY > height) return null;
+
+        // yWithin: 0 at piano top (back of piano, black-key region), 1 at piano bottom (front, white wide bottoms)
+        double yWithin = (screenY - pianoY) / pianoHeight;
+        bool useTopGeometry = yWithin < PianoLayout.BlackKeyHeightFraction;
+
+        return _layout.FindNoteAtX(screenX, useTopGeometry);
     }
 }

@@ -8,6 +8,9 @@ public interface IVisualizationEngine
 {
     string Name { get; }
 
+    /// <summary>Hit-tester for clicking piano keys in this view. Geometry is engine-specific.</summary>
+    IPianoHitTester HitTester { get; }
+
     void OnSizeChanged(double width, double height);
 
     void Render(

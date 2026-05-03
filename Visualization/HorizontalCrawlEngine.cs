@@ -16,9 +16,11 @@ namespace Singularidi.Visualization;
 /// Conceptually identical to the VerticalFall view but with the camera tilted from
 /// top-down to an angled view looking down the road toward the horizon.
 /// </summary>
-public sealed class HorizontalCrawlEngine : IVisualizationEngine
+public sealed class HorizontalCrawlEngine : IVisualizationEngine, IPianoHitTester
 {
     public string Name => "Horizontal Crawl";
+
+    public IPianoHitTester HitTester => this;
 
     public GuideLineStyle GuideLineStyle { get; set; } = GuideLineStyle.KeyWidthCentered;
 
@@ -60,6 +62,18 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
 
     // ── 3D projection constants ─────────────────────────────────────────
     private const double Znear = 1.0;
+
+    // ── Cached projection parameters (last frame) for hit-testing ───────
+    private double _hitVanishX;
+    private double _hitVanishY;
+    private double _hitRoadBottom;
+    private double _hitZpiano;
+    // World-space Y of the visible top surfaces of white & black keys (pixels).
+    private double _hitWhiteTopY;
+    private double _hitBlackTopY;
+    // Persp_HeightScale used in the most recent render — needed to invert the screen-Y lift.
+    private double _hitHeightScale;
+    private bool _hitParamsValid;
 
     public void OnSizeChanged(double width, double height)
     {
@@ -240,6 +254,108 @@ public sealed class HorizontalCrawlEngine : IVisualizationEngine
         _pianoRenderer.BlackPivotAngle = 0.04f;
 
         _pianoRenderer.Render(ctx, _layout, theme, activeKeyChannel, activeKeyTrack);
+
+        _hitVanishX = vanishX;
+        _hitVanishY = vanishY;
+        _hitRoadBottom = roadBottom;
+        _hitZpiano = Zpiano;
+        _hitWhiteTopY = _layout.WhiteKeyWidth * Piano3DGeometry.IvoryTopRatio;
+        _hitBlackTopY = _layout.WhiteKeyWidth * Piano3DGeometry.BlackTotalHeightRatio;
+        _hitHeightScale = _pianoRenderer.Persp_HeightScale;
+        _hitParamsValid = true;
+    }
+
+    public int? HitTest(double screenX, double screenY, double width, double height)
+    {
+        if (!_hitParamsValid) return null;
+        if (width <= 0 || height <= 0) return null;
+
+        _layout.RebuildIfNeeded(width);
+
+        double roadH = _hitRoadBottom - _hitVanishY;
+        if (roadH <= 0) return null;
+        if (screenY <= _hitVanishY || screenY > _hitRoadBottom) return null;
+
+        double zRange = _hitZpiano - Znear;
+        if (zRange <= 0) return null;
+
+        // Forward projection used by Piano3DRenderer in Perspective mode:
+        //   scale     = Znear / projZ
+        //   screenX   = vanishX + (worldX - vanishX) * scale
+        //   screenY   = vanishY + scale * ((roadBottom - vanishY) - worldY * heightScale)
+        // To invert for an assumed worldY (the visible key-top plane), solve for scale,
+        // then derive worldX and projZ. Test the black-key plane first (since black keys
+        // sit physically above white keys in worldY), then fall back to the white plane.
+
+        const double zFracBlackStart = Piano3DGeometry.BlackKeyZStartRatio; // 0.40
+
+        // 1) Black-key top plane.
+        double denomB = roadH - _hitBlackTopY * _hitHeightScale;
+        if (denomB > 0)
+        {
+            double scaleB = (screenY - _hitVanishY) / denomB;
+            if (scaleB > 0.0001)
+            {
+                double projZ = Znear / scaleB;
+                double zFrac = (projZ - Znear) / zRange;
+                if (zFrac >= zFracBlackStart && zFrac <= 1.0)
+                {
+                    double worldX = _hitVanishX + (screenX - _hitVanishX) / scaleB;
+                    if (worldX >= 0 && worldX <= width)
+                    {
+                        for (int n = 0; n < 128; n++)
+                        {
+                            if (!PianoLayout.IsBlackKey[n % 12]) continue;
+                            double l = _layout.KeyTopLeft[n];
+                            double r = _layout.KeyTopRight[n];
+                            if (l < 0) continue;
+                            if (worldX >= l && worldX < r) return n;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2) White-key top plane.
+        double denomW = roadH - _hitWhiteTopY * _hitHeightScale;
+        if (denomW <= 0) return null;
+        double scaleW = (screenY - _hitVanishY) / denomW;
+        if (scaleW <= 0.0001) return null;
+
+        double projZw = Znear / scaleW;
+        double zFracW = (projZw - Znear) / zRange;
+        // Allow zFracW slightly negative (front face / ivory overhang region).
+        if (zFracW > 1.0) return null;
+        double zFracClamped = Math.Max(zFracW, 0.0);
+
+        double worldXw = _hitVanishX + (screenX - _hitVanishX) / scaleW;
+        if (worldXw < 0 || worldXw > width) return null;
+
+        // White keys are T-shaped: wide bottom (front) for zFrac < 0.4,
+        // narrow top (back) for zFrac >= 0.4.
+        if (zFracClamped < zFracBlackStart)
+        {
+            for (int n = 0; n < 128; n++)
+            {
+                if (PianoLayout.IsBlackKey[n % 12]) continue;
+                double l = _layout.WhiteKeyBottomLeft[n];
+                double r = _layout.WhiteKeyBottomRight[n];
+                if (l < 0) continue;
+                if (worldXw >= l && worldXw < r) return n;
+            }
+        }
+        else
+        {
+            for (int n = 0; n < 128; n++)
+            {
+                if (PianoLayout.IsBlackKey[n % 12]) continue;
+                double l = _layout.KeyTopLeft[n];
+                double r = _layout.KeyTopRight[n];
+                if (l < 0) continue;
+                if (worldXw >= l && worldXw < r) return n;
+            }
+        }
+        return null;
     }
 
     private void DrawPerspectiveGuideLines(

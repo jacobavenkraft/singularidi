@@ -87,6 +87,14 @@ public sealed class MidiPlaybackEngine : IDisposable
         State = _currentFilePath != null ? PlaybackState.Loaded : PlaybackState.Idle;
     }
 
+    /// <summary>Trigger a piano-key press immediately, regardless of playback state.</summary>
+    public void PlayKey(int noteNumber, int velocity = 100)
+        => _audioEngine?.NoteOn(channel: 0, noteNumber, velocity);
+
+    /// <summary>Release a previously-triggered piano key.</summary>
+    public void ReleaseKey(int noteNumber)
+        => _audioEngine?.NoteOff(channel: 0, noteNumber);
+
     /// <summary>
     /// Called by the visualizer render loop each frame to emit NoteTriggered events
     /// and detect end-of-file.

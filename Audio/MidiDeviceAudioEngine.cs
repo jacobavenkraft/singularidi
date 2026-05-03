@@ -1,3 +1,4 @@
+using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Multimedia;
 
@@ -94,6 +95,50 @@ public sealed class MidiDeviceAudioEngine : IAudioEngine
         {
             Console.Error.WriteLine($"[MidiDeviceAudioEngine] Stop failed: {ex.Message}");
         }
+    }
+
+    public void NoteOn(int channel, int noteNumber, int velocity)
+    {
+        try
+        {
+            EnsureOutputDevice();
+            _outputDevice?.SendEvent(new NoteOnEvent
+            {
+                Channel = (FourBitNumber)channel,
+                NoteNumber = (SevenBitNumber)noteNumber,
+                Velocity = (SevenBitNumber)velocity,
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[MidiDeviceAudioEngine] NoteOn failed: {ex.Message}");
+        }
+    }
+
+    public void NoteOff(int channel, int noteNumber)
+    {
+        try
+        {
+            _outputDevice?.SendEvent(new NoteOffEvent
+            {
+                Channel = (FourBitNumber)channel,
+                NoteNumber = (SevenBitNumber)noteNumber,
+                Velocity = (SevenBitNumber)0,
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[MidiDeviceAudioEngine] NoteOff failed: {ex.Message}");
+        }
+    }
+
+    private void EnsureOutputDevice()
+    {
+        if (_outputDevice != null) return;
+        var devices = OutputDevice.GetAll().ToList();
+        if (devices.Count == 0) return;
+        _outputDevice = devices.FirstOrDefault(d => d.Name == _preferredDeviceName)
+                        ?? devices[0];
     }
 
     private void DisposePlayback()

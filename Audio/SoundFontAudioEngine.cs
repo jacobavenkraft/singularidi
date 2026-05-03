@@ -18,6 +18,10 @@ public sealed class SoundFontAudioEngine : IAudioEngine, IWaveProvider
     private WaveOutEvent? _waveOut;
     private volatile bool _paused;
 
+    // Guards _synthesizer and _sequencer access between the audio thread (Read)
+    // and the UI thread (NoteOn/NoteOff/Play/Stop).
+    private readonly object _synthLock = new();
+
     private readonly float[] _leftBuf  = new float[ChunkSamples];
     private readonly float[] _rightBuf = new float[ChunkSamples];
 
@@ -37,7 +41,7 @@ public sealed class SoundFontAudioEngine : IAudioEngine, IWaveProvider
 
     public void LoadFile(string midiFilePath)
     {
-        Stop();
+        StopSequencerOnly();
         _midiFilePath = midiFilePath;
         try
         {
@@ -63,16 +67,16 @@ public sealed class SoundFontAudioEngine : IAudioEngine, IWaveProvider
             return;
         }
 
-        _synthesizer = new Synthesizer(_soundFont, SampleRate);
+        EnsureAudioRunning();
+
         var midiFile = new MeltySynth.MidiFile(_midiFilePath);
-        _sequencer = new MidiFileSequencer(_synthesizer);
-        _sequencer.Play(midiFile, false);
+        lock (_synthLock)
+        {
+            _sequencer = new MidiFileSequencer(_synthesizer!);
+            _sequencer.Play(midiFile, false);
+        }
         _elapsedSeconds = 0;
         _paused = false;
-
-        _waveOut = new WaveOutEvent();
-        _waveOut.Init(this);
-        _waveOut.Play();
     }
 
     public void Pause()
@@ -88,35 +92,105 @@ public sealed class SoundFontAudioEngine : IAudioEngine, IWaveProvider
         _waveOut?.Stop();
         _waveOut?.Dispose();
         _waveOut = null;
-        _sequencer = null;
-        _synthesizer = null;
+        lock (_synthLock)
+        {
+            _sequencer = null;
+            _synthesizer = null;
+        }
         _elapsedSeconds = 0;
     }
 
-    // Called by NAudio on its audio thread — render MeltySynth into the buffer.
+    public void NoteOn(int channel, int noteNumber, int velocity)
+    {
+        if (_soundFont == null) return;
+        EnsureAudioRunning();
+        lock (_synthLock)
+        {
+            _synthesizer?.NoteOn(channel, noteNumber, velocity);
+        }
+    }
+
+    public void NoteOff(int channel, int noteNumber)
+    {
+        lock (_synthLock)
+        {
+            _synthesizer?.NoteOff(channel, noteNumber);
+        }
+    }
+
+    private void StopSequencerOnly()
+    {
+        lock (_synthLock)
+        {
+            _sequencer = null;
+        }
+        _elapsedSeconds = 0;
+    }
+
+    private void EnsureAudioRunning()
+    {
+        if (_soundFont == null) return;
+        lock (_synthLock)
+        {
+            _synthesizer ??= new Synthesizer(_soundFont, SampleRate);
+        }
+        if (_waveOut == null)
+        {
+            _waveOut = new WaveOutEvent();
+            _waveOut.Init(this);
+            _waveOut.Play();
+        }
+    }
+
+    // Called by NAudio on its audio thread. Mixes whichever audio sources are active:
+    //   - sequencer driving the synth (during MIDI playback), or
+    //   - the synth alone (when only click-to-play notes are active), or
+    //   - silence (when nothing is loaded yet).
     public int Read(byte[] buffer, int offset, int count)
     {
-        if (_sequencer == null)
-        {
-            Array.Clear(buffer, offset, count);
-            return count;
-        }
-
         int bytesWritten = 0;
         while (bytesWritten < count)
         {
             int samplesThisChunk = Math.Min(ChunkSamples, (count - bytesWritten) / 4);
             if (samplesThisChunk == 0) break;
 
-            _sequencer.Render(_leftBuf.AsSpan(0, samplesThisChunk), _rightBuf.AsSpan(0, samplesThisChunk));
-            _elapsedSeconds += (double)samplesThisChunk / SampleRate;
+            bool rendered;
+            lock (_synthLock)
+            {
+                if (_sequencer != null)
+                {
+                    _sequencer.Render(_leftBuf.AsSpan(0, samplesThisChunk), _rightBuf.AsSpan(0, samplesThisChunk));
+                    _elapsedSeconds += (double)samplesThisChunk / SampleRate;
+                    if (_totalDurationSeconds > 0 && _elapsedSeconds >= _totalDurationSeconds + 1.0)
+                    {
+                        // File playback complete; drop sequencer so the synth keeps producing
+                        // any decay tail and manual click-to-play voices.
+                        _sequencer = null;
+                    }
+                    rendered = true;
+                }
+                else if (_synthesizer != null)
+                {
+                    _synthesizer.Render(_leftBuf.AsSpan(0, samplesThisChunk), _rightBuf.AsSpan(0, samplesThisChunk));
+                    rendered = true;
+                }
+                else
+                {
+                    rendered = false;
+                }
+            }
 
-            bool silence = _totalDurationSeconds > 0 && _elapsedSeconds >= _totalDurationSeconds + 1.0;
+            if (!rendered)
+            {
+                Array.Clear(buffer, offset + bytesWritten, samplesThisChunk * 4);
+                bytesWritten += samplesThisChunk * 4;
+                continue;
+            }
 
             for (int i = 0; i < samplesThisChunk; i++)
             {
-                short l = silence ? (short)0 : FloatToShort(_leftBuf[i]);
-                short r = silence ? (short)0 : FloatToShort(_rightBuf[i]);
+                short l = FloatToShort(_leftBuf[i]);
+                short r = FloatToShort(_rightBuf[i]);
                 int pos = offset + bytesWritten + i * 4;
                 buffer[pos]     = (byte)(l & 0xFF);
                 buffer[pos + 1] = (byte)((l >> 8) & 0xFF);

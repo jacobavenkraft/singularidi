@@ -120,6 +120,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             OnMidiFileOpened(config.LastMidiFilePath);
     }
 
+    // ── Click-to-play ──────────────────────────────────────────────────────
+
+    public void OnKeyPressed(int noteNumber) => _engine.PlayKey(noteNumber);
+    public void OnKeyReleased(int noteNumber) => _engine.ReleaseKey(noteNumber);
+
     // ── Highlight toggle ───────────────────────────────────────────────────
 
     partial void OnHighlightActiveNotesChanged(bool value)

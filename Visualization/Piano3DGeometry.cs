@@ -33,14 +33,19 @@ public sealed class Piano3DGeometry
 {
     // Proportional dimensions (multiples of WhiteKeyWidth)
     private const float KeyLengthRatio = 6.5f;       // Z depth of white key
-    private const float WoodHeightRatio = 0.52f;      // Y height of wood block
-    private const float IvoryThicknessRatio = 0.087f;  // Y thickness of ivory cap
+    public const float WoodHeightRatio = 0.52f;      // Y height of wood block
+    public const float IvoryThicknessRatio = 0.087f;  // Y thickness of ivory cap
     private const float IvoryOverhangRatio = 0.065f;   // Z overhang at front only
-    private const float BlackTotalHeightRatio = 0.87f;  // Y total height of black key
+    public const float BlackTotalHeightRatio = 0.87f;  // Y total height of black key (top surface in worldY units of WhiteKeyWidth)
     private const float BlackUpperHeightRatio = 0.35f;  // Y height above white key surface
     private const float BlackUpperTaper = 0.06f;        // fraction inset per side at top
-    private const float BlackKeyLengthRatio = 0.60f;    // black key is shorter than white key
+    public const float BlackKeyLengthRatio = 0.60f;    // black key is shorter than white key
     private const float IvoryCornerRadius = 0.04f;      // corner radius as fraction of key width
+
+    /// <summary>Top of the white-key playable surface, as a fraction of WhiteKeyWidth (worldY units).</summary>
+    public const float IvoryTopRatio = WoodHeightRatio + IvoryThicknessRatio;
+    /// <summary>Fraction of KeyLength at which black keys (and the white-key narrow back section) begin.</summary>
+    public const float BlackKeyZStartRatio = 1.0f - BlackKeyLengthRatio;
 
     private readonly List<Face3D> _faces = new();
     private float _cachedWhiteKeyWidth = -1;
